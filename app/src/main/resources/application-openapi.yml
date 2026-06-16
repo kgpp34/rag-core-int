@@ -1,0 +1,29 @@
+spring:
+  ai:
+    chat:
+      memory:
+        repository:
+          jdbc:
+            initialize-schema: never
+
+metadata-cacher:
+  warmup-enabled: false
+  warmup-fail-fast: false
+  scheduler:
+    dify-db:
+      enabled: false
+
+rag:
+  datasource:
+    metadata:
+      dify:
+        enabled: false
+  chat:
+    memory-enabled: false
+
+logging:
+  level:
+    root: WARN
+    com.cffex.rag: WARN
+    org.springdoc: ERROR
+    org.apache.tomcat.util.net.Acceptor: OFF

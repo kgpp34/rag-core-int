@@ -1,0 +1,1429 @@
+package com.cffex.rag.app.application;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
+
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.cffex.rag.app.api.ApiModels;
+import com.cffex.rag.app.config.AppProperties;
+import com.cffex.rag.common.domain.llm.LlmMessage;
+import com.cffex.rag.common.domain.llm.LlmMessageRole;
+import com.cffex.rag.common.domain.llm.LlmRequest;
+import com.cffex.rag.common.domain.llm.LlmResponse;
+import com.cffex.rag.common.domain.llm.LlmStreamChunk;
+import com.cffex.rag.common.domain.memory.ConversationMemoryContext;
+import com.cffex.rag.common.domain.memory.ConversationMemoryRequest;
+import com.cffex.rag.common.domain.metadata.KnowledgeBaseQueryCondition;
+import com.cffex.rag.common.domain.metadata.KnowledgeBaseMeta;
+import com.cffex.rag.common.domain.metadata.ModelMeta;
+import com.cffex.rag.common.domain.metadata.ModelQueryCondition;
+import com.cffex.rag.common.domain.metadata.ModelType;
+import com.cffex.rag.common.domain.query.ExecutionPlan;
+import com.cffex.rag.common.domain.query.QueryPlanRequest;
+import com.cffex.rag.common.domain.query.RetrievalPlan;
+import com.cffex.rag.common.domain.retrieval.ModelEndpointSpec;
+import com.cffex.rag.common.domain.retrieval.RankingSpec;
+import com.cffex.rag.common.domain.retrieval.RetrievalContext;
+import com.cffex.rag.common.domain.retrieval.RetrievalResult;
+import com.cffex.rag.common.domain.retrieval.RetrievedChunk;
+import com.cffex.rag.common.exception.RagErrorCode;
+import com.cffex.rag.common.exception.RagServiceException;
+import com.cffex.rag.common.service.LlmService;
+import com.cffex.rag.common.service.MetadataQueryService;
+import com.cffex.rag.common.service.QueryPlannerFacade;
+import com.cffex.rag.common.service.RagProcessEventPublisher;
+import com.cffex.rag.common.service.RagProcessEventPublisher.RagProcessStage;
+import com.cffex.rag.common.service.RagProcessEventPublisher.StageHandle;
+import com.cffex.rag.common.service.RetrievalEngine;
+import com.cffex.rag.common.service.ConversationMemoryService;
+import com.cffex.rag.trace.application.NoOpTraceRecorder;
+import com.cffex.rag.trace.application.TraceRecorder;
+import com.cffex.rag.trace.config.TraceProperties;
+
+/**
+ * RAG API 应用服务。
+ *
+ * <p>负责串联查询规划、检索执行和 LLM 生成三段主流程，
+ * 并把领域对象转换成对外接口需要的响应结构。
+ */
+@Service
+public class RagApiService {
+
+    private static final Logger log = LoggerFactory.getLogger(RagApiService.class);
+    private static final Set<String> SUMMARY_TRACE_EVENTS = Set.of(
+            "rag.request.received",
+            "query_rewrite.summary",
+            "retrieval.summary",
+            "answer_generation.summary"
+    );
+
+    private final MetadataQueryService metadataQueryService;
+    private final QueryPlannerFacade queryPlannerFacade;
+    private final RetrievalEngine retrievalEngine;
+    private final LlmService llmService;
+    private final AppProperties appProperties;
+    private final ConversationMemoryService conversationMemoryService;
+    private final TraceRecorder traceRecorder;
+    private final TraceProperties traceProperties;
+
+    @Autowired
+    public RagApiService(
+            MetadataQueryService metadataQueryService,
+            QueryPlannerFacade queryPlannerFacade,
+            RetrievalEngine retrievalEngine,
+            LlmService llmService,
+            AppProperties appProperties,
+            ConversationMemoryService conversationMemoryService,
+            TraceRecorder traceRecorder,
+            TraceProperties traceProperties
+    ) {
+        this.metadataQueryService = Objects.requireNonNull(metadataQueryService);
+        this.queryPlannerFacade = Objects.requireNonNull(queryPlannerFacade);
+        this.retrievalEngine = Objects.requireNonNull(retrievalEngine);
+        this.llmService = Objects.requireNonNull(llmService);
+        this.appProperties = Objects.requireNonNull(appProperties);
+        this.conversationMemoryService = Objects.requireNonNull(conversationMemoryService);
+        this.traceRecorder = Objects.requireNonNull(traceRecorder);
+        this.traceProperties = Objects.requireNonNull(traceProperties);
+    }
+
+    RagApiService(
+            MetadataQueryService metadataQueryService,
+            QueryPlannerFacade queryPlannerFacade,
+            RetrievalEngine retrievalEngine,
+            LlmService llmService,
+            AppProperties appProperties,
+            ConversationMemoryService conversationMemoryService
+    ) {
+        this(
+                metadataQueryService,
+                queryPlannerFacade,
+                retrievalEngine,
+                llmService,
+                appProperties,
+                conversationMemoryService,
+                new NoOpTraceRecorder(),
+                new TraceProperties()
+        );
+    }
+
+    public ApiModels.RetrievalResponse search(ApiModels.QueryRequest request) {
+        long start = System.nanoTime();
+        recordTrace("request", "rag.request.received", Map.of(
+                "endpointType", "search",
+                "originalQuery", request.query(),
+                "queryLength", request.query().length(),
+                "docFilterCount", safeList(request.docIds()).size(),
+                "planType", Objects.toString(request.planType(), "default"),
+                "queryRewriteEnabled", Objects.toString(queryRewriteEnabled(request), "default"),
+                "stream", false
+        ));
+        log.info("开始处理检索请求，问题长度={}，文档数={}，计划类型={}，queryRewrite={}",
+                request.query().length(),
+                safeList(request.docIds()).size(),
+                request.planType(),
+                queryRewriteEnabled(request));
+        try {
+            ExecutionPlan executionPlan = planSearch(request);
+            RetrievalPlan plan = executionPlan.primaryRetrievalPlan();
+            RetrievalResult result = executeRetrievalWithRewrite(
+                    request.query(),
+                    queryRewriteEnabled(request),
+                    queryRewritePrompt(request),
+                    plan,
+                    RagProcessEventPublisher.NO_OP
+            );
+            log.info("检索请求处理完成，请求ID={}，结果块数={}，检索子计划数={}，召回规格数={}，排序策略={}",
+                    result.requestId(),
+                    result.chunks().size(),
+                    executionPlan.retrievalPlans().size(),
+                    plan.recallSpecs().size(),
+                    plan.rankingSpec().getClass().getSimpleName());
+            return toRetrievalResponse(result);
+        } catch (RuntimeException ex) {
+            recordTrace("request", "rag.request.failed", Map.of(
+                    "endpointType", "search",
+                    "error", summarize(ex),
+                    "totalMs", durationMs(start)
+            ));
+            throw ex;
+        }
+    }
+
+    public ApiModels.RagAnswerResponse answer(ApiModels.RagAnswerRequest request) {
+        long start = System.nanoTime();
+        recordTrace("request", "rag.request.received", Map.of(
+                "endpointType", "answer",
+                "originalQuery", request.query(),
+                "queryLength", request.query().length(),
+                "docFilterCount", safeList(request.docIds()).size(),
+                "planType", Objects.toString(request.planType(), "default"),
+                "queryRewriteEnabled", Objects.toString(queryRewriteEnabled(request), "default"),
+                "stream", false
+        ));
+        log.info("开始处理问答请求，问题长度={}，文档数={}，计划类型={}，流式={}",
+                request.query().length(),
+                safeList(request.docIds()).size(),
+                request.planType(),
+                false);
+        try {
+            PreparedAnswer preparedAnswer = prepareAnswer(request, RagProcessEventPublisher.NO_OP);
+            log.info("问答生成开始，请求ID={}，结果块数={}，模型ID={}，流式={}",
+                    preparedAnswer.retrieval().requestId(),
+                    preparedAnswer.retrieval().chunks().size(),
+                    preparedAnswer.llmModel().modelId(),
+                    false);
+            LlmResponse llmResponse = generateAnswer(preparedAnswer.llmRequest());
+            log.info("问答请求处理完成，请求ID={}，结束原因={}，结果块数={}",
+                    preparedAnswer.retrieval().requestId(),
+                    llmResponse.finishReason(),
+                    preparedAnswer.retrieval().chunks().size());
+            return toRagAnswerResponse(llmResponse.content(), preparedAnswer);
+        } catch (RuntimeException ex) {
+            recordTrace("request", "rag.request.failed", Map.of(
+                    "endpointType", "answer",
+                    "error", summarize(ex),
+                    "totalMs", durationMs(start)
+            ));
+            throw ex;
+        }
+    }
+
+    public void streamAnswer(
+            ApiModels.RagAnswerRequest request,
+            Consumer<StreamEvent> eventConsumer
+    ) {
+        long start = System.nanoTime();
+        recordTrace("request", "rag.request.received", Map.of(
+                "endpointType", "answer",
+                "originalQuery", request.query(),
+                "queryLength", request.query().length(),
+                "docFilterCount", safeList(request.docIds()).size(),
+                "planType", Objects.toString(request.planType(), "default"),
+                "queryRewriteEnabled", Objects.toString(queryRewriteEnabled(request), "default"),
+                "stream", true
+        ));
+        log.info("开始处理问答请求，问题长度={}，文档数={}，计划类型={}，流式={}",
+                request.query().length(),
+                safeList(request.docIds()).size(),
+                request.planType(),
+                true);
+        RagProcessEventPublisher eventPublisher = new SseRagProcessEventPublisher(eventConsumer);
+        PreparedAnswer preparedAnswer = prepareAnswer(request, eventPublisher);
+        log.info("问答生成开始，请求ID={}，结果块数={}，模型ID={}，流式={}",
+                preparedAnswer.retrieval().requestId(),
+                preparedAnswer.retrieval().chunks().size(),
+                preparedAnswer.llmModel().modelId(),
+                true);
+
+        StringBuilder answerBuilder = new StringBuilder();
+        AtomicReference<String> finishReasonHolder = new AtomicReference<>();
+        AtomicReference<Map<String, Object>> metadataHolder = new AtomicReference<>(Map.of());
+        AtomicBoolean firstTokenEmitted = new AtomicBoolean();
+        AtomicReference<Long> firstTokenMsHolder = new AtomicReference<>();
+        long generationStart = System.nanoTime();
+        StageHandle generationHandle = eventPublisher.start(RagProcessStage.ANSWER_GENERATION, Map.of());
+        recordTrace("answer_generation", "answer_generation.started", Map.of(
+                "modelId", preparedAnswer.llmModel().modelId(),
+                "messageCount", preparedAnswer.llmRequest().messages().size(),
+                "referenceCount", preparedAnswer.retrieval().chunks().size(),
+                "stream", true
+        ));
+        try {
+            llmService.streamGenerate(preparedAnswer.llmRequest(), chunk -> {
+                handleStreamChunk(
+                        chunk,
+                        answerBuilder,
+                        finishReasonHolder,
+                        metadataHolder,
+                        preparedAnswer,
+                        eventConsumer,
+                        eventPublisher,
+                        generationHandle,
+                        firstTokenEmitted,
+                        firstTokenMsHolder,
+                        generationStart
+                );
+            });
+        } catch (RagServiceException ex) {
+            eventPublisher.fail(generationHandle, ex.errorCode().name());
+            recordTrace("answer_generation", "answer_generation.failed", Map.of(
+                    "errorCode", ex.errorCode().name(),
+                    "message", summarize(ex)
+            ));
+            recordTrace("request", "rag.request.failed", Map.of(
+                    "endpointType", "answer",
+                    "error", summarize(ex),
+                    "totalMs", durationMs(start),
+                    "stream", true
+            ));
+            throw ex;
+        } catch (RuntimeException ex) {
+            eventPublisher.fail(generationHandle, RagErrorCode.LLM_UNAVAILABLE.name());
+            recordTrace("answer_generation", "answer_generation.failed", Map.of(
+                    "errorCode", RagErrorCode.LLM_UNAVAILABLE.name(),
+                    "message", summarize(ex)
+            ));
+            recordTrace("request", "rag.request.failed", Map.of(
+                    "endpointType", "answer",
+                    "error", summarize(ex),
+                    "totalMs", durationMs(start),
+                    "stream", true
+            ));
+            throw new RagServiceException(
+                    RagErrorCode.LLM_UNAVAILABLE,
+                    "流式答案生成失败: " + summarize(ex),
+                    ex
+            );
+        }
+
+        if (finishReasonHolder.get() == null) {
+            log.info("流式问答结束，但未收到显式结束块，请求ID={}，结果块数={}",
+                    preparedAnswer.retrieval().requestId(),
+                    preparedAnswer.retrieval().chunks().size());
+            eventPublisher.complete(generationHandle, answerGenerationDetails(null, metadataHolder.get()));
+            eventConsumer.accept(new StreamEvent("done", new ApiModels.RagAnswerStreamDone(
+                    null,
+                    Map.of()
+            )));
+            recordTrace("answer_generation", "answer_generation.summary", Map.of(
+                    "requestId", preparedAnswer.retrieval().requestId(),
+                    "model", preparedAnswer.llmRequest().modelEndpoint().model(),
+                    "finishReason", "",
+                    "answerLength", answerBuilder.length(),
+                    "answerContent", answerBuilder.toString(),
+                    "userPrompt", lastUserPrompt(preparedAnswer.llmRequest()),
+                    "firstTokenMs", Objects.requireNonNullElse(firstTokenMsHolder.get(), -1L),
+                    "elapsedMs", durationMs(generationStart),
+                    "stream", true
+            ));
+        }
+    }
+
+    /** 将检索 API 请求转换为查询规划请求。 */
+    private QueryPlanRequest toQueryPlanRequest(ApiModels.QueryRequest request) {
+        return new QueryPlanRequest(
+                request.query(),
+                safeList(request.docIds()),
+                request.planType(),
+                request.systemPrompt()
+        );
+    }
+
+    /** 将检索 API 请求转换为可直连 planner 的检索上下文。 */
+    private RetrievalContext toRetrievalContext(ApiModels.QueryRequest request) {
+        List<String> knowledgeBaseIds = resolveKnowledgeBaseIds(safeList(request.docIds()));
+        Double scoreThreshold = tuningScoreThreshold(request);
+        return new RetrievalContext(
+                "app-api",
+                request.query(),
+                knowledgeBaseIds,
+                safeList(request.docIds()),
+                null,
+                null,
+                positiveOrZero(tuningTopK(request)),
+                positiveOrZero(tuningCandidateK(request)),
+                scoreThreshold != null,
+                scoreThreshold == null ? 0.0d : scoreThreshold,
+                Map.of(),
+                Map.of()
+        );
+    }
+
+    /** 将问答 API 请求转换为查询规划请求。 */
+    private QueryPlanRequest toQueryPlanRequest(ApiModels.RagAnswerRequest request) {
+        return new QueryPlanRequest(
+                request.query(),
+                safeList(request.docIds()),
+                request.planType(),
+                request.systemPrompt()
+        );
+    }
+
+    /** 将问答 API 请求转换为可直连 planner 的检索上下文。 */
+    private RetrievalContext toRetrievalContext(ApiModels.RagAnswerRequest request) {
+        List<String> knowledgeBaseIds = resolveKnowledgeBaseIds(safeList(request.docIds()));
+        Double scoreThreshold = tuningScoreThreshold(request);
+        return new RetrievalContext(
+                "app-api",
+                request.query(),
+                knowledgeBaseIds,
+                safeList(request.docIds()),
+                null,
+                null,
+                positiveOrZero(tuningTopK(request)),
+                positiveOrZero(tuningCandidateK(request)),
+                scoreThreshold != null,
+                scoreThreshold == null ? 0.0d : scoreThreshold,
+                Map.of(),
+                Map.of()
+        );
+    }
+
+    /** 统一处理可空列表，避免下游链路重复判空。 */
+    private List<String> safeList(List<String> values) {
+        return values == null ? List.of() : values;
+    }
+
+    private static Integer tuningTopK(ApiModels.QueryRequest request) {
+        return request.retrievalTuning() != null ? request.retrievalTuning().topK() : null;
+    }
+
+    private static Integer tuningCandidateK(ApiModels.QueryRequest request) {
+        return request.retrievalTuning() != null ? request.retrievalTuning().candidateK() : null;
+    }
+
+    private static Double tuningScoreThreshold(ApiModels.QueryRequest request) {
+        return request.retrievalTuning() != null ? request.retrievalTuning().scoreThreshold() : null;
+    }
+
+    private static Integer tuningTopK(ApiModels.RagAnswerRequest request) {
+        return request.retrievalTuning() != null ? request.retrievalTuning().topK() : null;
+    }
+
+    private static Integer tuningCandidateK(ApiModels.RagAnswerRequest request) {
+        return request.retrievalTuning() != null ? request.retrievalTuning().candidateK() : null;
+    }
+
+    private static Double tuningScoreThreshold(ApiModels.RagAnswerRequest request) {
+        return request.retrievalTuning() != null ? request.retrievalTuning().scoreThreshold() : null;
+    }
+
+    private static Boolean queryRewriteEnabled(ApiModels.QueryRequest request) {
+        return request.queryRewrite() != null ? request.queryRewrite().enabled() : null;
+    }
+
+    private static String queryRewritePrompt(ApiModels.QueryRequest request) {
+        return request.queryRewrite() != null ? request.queryRewrite().prompt() : null;
+    }
+
+    private static Boolean queryRewriteEnabled(ApiModels.RagAnswerRequest request) {
+        return request.queryRewrite() != null ? request.queryRewrite().enabled() : null;
+    }
+
+    private static String queryRewritePrompt(ApiModels.RagAnswerRequest request) {
+        return request.queryRewrite() != null ? request.queryRewrite().prompt() : null;
+    }
+
+    /** 解析最终使用的 LLM 模型，优先按 modelName 匹配，兼容历史配置继续按 modelId 命中。 */
+    private ModelMeta resolveLlmModel(String modelSelector) {
+        List<ModelMeta> llmModels = metadataQueryService.listModels(new ModelQueryCondition(ModelType.LLM, null));
+        String requestedModelSelector = normalize(modelSelector);
+        String configuredModelSelector = firstNonBlank(
+                appProperties.getRag().getAnswer().getDefaultLlmModel(),
+                appProperties.getRag().getAnswer().getDefaultLlmModelId()
+        );
+        String effectiveModelSelector = requestedModelSelector != null
+                ? requestedModelSelector
+                : configuredModelSelector;
+        if (StringUtils.isBlank(effectiveModelSelector)) {
+            throw new RagServiceException(
+                    RagErrorCode.INVALID_CONFIGURATION,
+                    "问答模型未配置，请检查 app.rag.answer.default-llm-model 或 app.rag.answer.default-llm-model-id"
+            );
+        }
+        String normalizedModelSelector = normalizeForComparison(effectiveModelSelector);
+        return llmModels.stream()
+                .filter(model -> matchesModel(model, effectiveModelSelector, normalizedModelSelector))
+                .findFirst()
+                .orElseThrow(() -> new RagServiceException(
+                        RagErrorCode.INVALID_CONFIGURATION,
+                        "问答模型不存在或未启用: " + effectiveModelSelector
+                ));
+    }
+
+    private ModelEndpointSpec toEndpoint(ModelMeta modelMeta) {
+        return new ModelEndpointSpec(modelMeta.baseUrl(), modelMeta.apiKey(), modelMeta.modelName());
+    }
+
+    /**
+     * 组装发送给 LLM 的消息列表。
+     *
+     * <p>系统提示词来自执行计划或默认配置，用户消息中会拼接检索回来的知识片段。
+     */
+    private List<LlmMessage> buildAnswerMessages(
+            ExecutionPlan executionPlan,
+            ApiModels.RagAnswerRequest request,
+            List<RetrievedChunk> chunks
+    ) {
+        List<LlmMessage> messages = new ArrayList<>();
+        messages.add(new LlmMessage(LlmMessageRole.SYSTEM, resolveSystemPrompt(executionPlan.systemPrompt())));
+
+        Map<String, String> docNames = resolveDocumentNames(chunks);
+        String difyFilesUrl = appProperties.getRag().getDifyFilesUrl();
+
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("请基于下面检索到的知识片段回答用户问题。");
+        prompt.append('\n').append("如果知识片段不足以支持结论，请明确说明。");
+        prompt.append('\n').append('\n').append("用户问题：").append(request.query());
+        prompt.append('\n').append('\n').append("知识片段：");
+        for (int i = 0; i < chunks.size(); i++) {
+            RetrievedChunk chunk = chunks.get(i);
+            String docName = docNames.get(chunk.documentId());
+            Map<String, Object> metadata = chunk.metadata();
+            prompt.append('\n')
+                    .append('[').append(i + 1).append(']');
+            if (docName != null) {
+                prompt.append(" 来源：").append(docName);
+            }
+            if (difyFilesUrl != null
+                    && metadata.containsKey("document_name")
+                    && metadata.containsKey("upload_file_id")) {
+                String fileName = String.valueOf(metadata.get("document_name"));
+                String uploadFileId = String.valueOf(metadata.get("upload_file_id"));
+                String fileUrl = buildFilePath(difyFilesUrl, uploadFileId, fileName);
+                if (fileUrl != null) {
+                    prompt.append(" 链接：").append(fileUrl);
+                }
+            }
+            prompt.append('\n')
+                    .append(chunk.content());
+        }
+        messages.add(new LlmMessage(LlmMessageRole.USER, prompt.toString()));
+        return List.copyOf(messages);
+    }
+
+    private String resolveSystemPrompt(String requestSystemPrompt) {
+        String effectivePrompt = normalize(requestSystemPrompt);
+        if (effectivePrompt != null) {
+            return effectivePrompt;
+        }
+        effectivePrompt = appProperties.getRag().getAnswer().getDefaultSystemPrompt();
+        if (effectivePrompt == null) {
+            throw new RagServiceException(
+                    RagErrorCode.INVALID_CONFIGURATION,
+                    "问答系统提示词未配置，请检查 app.rag.answer.default-system-prompt"
+            );
+        }
+        return effectivePrompt;
+    }
+
+    private String normalize(String value) {
+        return value == null || value.isBlank() ? null : value;
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        String normalizedPrimary = normalize(primary);
+        return normalizedPrimary != null ? normalizedPrimary : normalize(fallback);
+    }
+
+    private boolean matchesModel(ModelMeta model, String configuredValue, String normalizedConfiguredValue) {
+        if (configuredValue.equals(model.modelName())) {
+            return true;
+        }
+        if (configuredValue.equals(model.modelId())) {
+            return true;
+        }
+        String normalizedModelName = normalizeForComparison(model.modelName());
+        return normalizedConfiguredValue != null && normalizedConfiguredValue.equals(normalizedModelName);
+    }
+
+    private String normalizeForComparison(String value) {
+        String normalized = normalize(value);
+        return normalized == null ? null : normalized.toLowerCase(Locale.ROOT);
+    }
+
+    private ApiModels.RetrievalResponse toRetrievalResponse(RetrievalResult result) {
+        return new ApiModels.RetrievalResponse(
+                result.requestId(),
+                result.chunks().stream()
+                        .map(chunk -> new ApiModels.RetrievedChunkView(
+                                chunk.chunkId(),
+                                chunk.documentId(),
+                                chunk.knowledgeBaseId(),
+                                chunk.vectorScore(),
+                                chunk.sparseScore(),
+                                chunk.rankingScore(),
+                                chunk.content(),
+                                chunk.metadata()
+                        ))
+                        .toList(),
+                result.debugTrace()
+        );
+    }
+
+    /** 预先完成检索和模型解析，生成后续问答阶段需要的上下文。 */
+    private PreparedAnswer prepareAnswer(
+            ApiModels.RagAnswerRequest request,
+            RagProcessEventPublisher eventPublisher
+    ) {
+        ExecutionPlan executionPlan = planAnswer(request);
+        RetrievalPlan retrievalPlan = executionPlan.primaryRetrievalPlan();
+        RetrievalResult retrieval = executeRetrievalWithRewrite(
+                request.query(),
+                queryRewriteEnabled(request),
+                queryRewritePrompt(request),
+                retrievalPlan,
+                eventPublisher
+        );
+        ModelMeta llmModel = resolveLlmModel(null);
+        ApiModels.MemoryConfig memory = request.memory();
+        ConversationMemoryContext memoryContext = conversationMemoryService.resolve(new ConversationMemoryRequest(
+                request.userId(),
+                memory != null,
+                memory != null ? memory.conversationId() : null
+        ));
+        LlmRequest llmRequest = new LlmRequest(
+                toEndpoint(llmModel),
+                buildAnswerMessages(executionPlan, request, retrieval.chunks()),
+                appProperties.getRag().getAnswer().getDefaultTemperature(),
+                appProperties.getRag().getAnswer().getDefaultMaxTokens(),
+                memoryContext.userId(),
+                memoryContext.conversationId()
+        );
+        return new PreparedAnswer(executionPlan, retrieval, llmModel, llmRequest);
+    }
+
+    private ExecutionPlan planAnswer(ApiModels.RagAnswerRequest request) {
+        long start = System.nanoTime();
+        recordTrace("planning", "planning.request", Map.of(
+                "endpointType", "answer",
+                "planType", Objects.toString(request.planType(), "default"),
+                "docFilterCount", safeList(request.docIds()).size(),
+                "directRetrievalContext", shouldUseRetrievalContext(request)
+        ));
+        try {
+            ExecutionPlan plan = shouldUseRetrievalContext(request)
+                    ? preserveRequestPrompt(queryPlannerFacade.plan(toRetrievalContext(request)), request.systemPrompt())
+                    : queryPlannerFacade.plan(toQueryPlanRequest(request));
+            recordTrace("planning", "planning.completed", planningPayload(plan, durationMs(start)));
+            return plan;
+        } catch (IllegalArgumentException ex) {
+            recordTrace("planning", "planning.failed", Map.of("error", summarize(ex), "totalMs", durationMs(start)));
+            throw ex;
+        } catch (UnsupportedOperationException ex) {
+            recordTrace("planning", "planning.failed", Map.of(
+                    "errorCode", RagErrorCode.PLAN_UNSUPPORTED.name(),
+                    "error", summarize(ex),
+                    "totalMs", durationMs(start)
+            ));
+            throw new RagServiceException(
+                    RagErrorCode.PLAN_UNSUPPORTED,
+                    "当前请求使用的规划类型暂不支持: " + Objects.toString(request.planType(), "default"),
+                    ex
+            );
+        } catch (RagServiceException ex) {
+            recordTrace("planning", "planning.failed", Map.of(
+                    "errorCode", ex.errorCode().name(),
+                    "error", summarize(ex),
+                    "totalMs", durationMs(start)
+            ));
+            throw ex;
+        } catch (RuntimeException ex) {
+            recordTrace("planning", "planning.failed", Map.of(
+                    "errorCode", RagErrorCode.PLANNING_FAILED.name(),
+                    "error", summarize(ex),
+                    "totalMs", durationMs(start)
+            ));
+            throw new RagServiceException(
+                    RagErrorCode.PLANNING_FAILED,
+                    "查询规划失败: " + summarize(ex),
+                    ex
+            );
+        }
+    }
+
+    private ExecutionPlan planSearch(ApiModels.QueryRequest request) {
+        long start = System.nanoTime();
+        recordTrace("planning", "planning.request", Map.of(
+                "endpointType", "search",
+                "planType", Objects.toString(request.planType(), "default"),
+                "docFilterCount", safeList(request.docIds()).size(),
+                "directRetrievalContext", shouldUseRetrievalContext(request)
+        ));
+        try {
+            ExecutionPlan plan = shouldUseRetrievalContext(request)
+                    ? preserveRequestPrompt(queryPlannerFacade.plan(toRetrievalContext(request)), request.systemPrompt())
+                    : queryPlannerFacade.plan(toQueryPlanRequest(request));
+            recordTrace("planning", "planning.completed", planningPayload(plan, durationMs(start)));
+            return plan;
+        } catch (IllegalArgumentException ex) {
+            recordTrace("planning", "planning.failed", Map.of("error", summarize(ex), "totalMs", durationMs(start)));
+            throw ex;
+        } catch (UnsupportedOperationException ex) {
+            recordTrace("planning", "planning.failed", Map.of(
+                    "errorCode", RagErrorCode.PLAN_UNSUPPORTED.name(),
+                    "error", summarize(ex),
+                    "totalMs", durationMs(start)
+            ));
+            throw new RagServiceException(
+                    RagErrorCode.PLAN_UNSUPPORTED,
+                    "当前检索请求使用的规划类型暂不支持: " + Objects.toString(request.planType(), "default"),
+                    ex
+            );
+        } catch (RagServiceException ex) {
+            recordTrace("planning", "planning.failed", Map.of(
+                    "errorCode", ex.errorCode().name(),
+                    "error", summarize(ex),
+                    "totalMs", durationMs(start)
+            ));
+            throw ex;
+        } catch (RuntimeException ex) {
+            recordTrace("planning", "planning.failed", Map.of(
+                    "errorCode", RagErrorCode.PLANNING_FAILED.name(),
+                    "error", summarize(ex),
+                    "totalMs", durationMs(start)
+            ));
+            throw new RagServiceException(
+                    RagErrorCode.PLANNING_FAILED,
+                    "检索规划失败: " + summarize(ex),
+                    ex
+            );
+        }
+    }
+
+    private RetrievalResult executeRetrieval(
+            RetrievalPlan retrievalPlan,
+            RagProcessEventPublisher eventPublisher,
+            int queryIndex,
+            int queryCount
+    ) {
+        long traceStart = System.nanoTime();
+        List<Map<String, Object>> knowledgeBases = eventPublisher == RagProcessEventPublisher.NO_OP
+                ? List.of()
+                : resolveKnowledgeBaseSummaries(retrievalPlan);
+        recordTrace("retrieval", "retrieval.started", retrievalEventDetails(
+                retrievalPlan, knowledgeBases, queryIndex, queryCount, null));
+        StageHandle handle = eventPublisher.start(
+                RagProcessStage.RETRIEVAL,
+                retrievalEventDetails(retrievalPlan, knowledgeBases, queryIndex, queryCount, null)
+        );
+        try {
+            RetrievalResult result = eventPublisher == RagProcessEventPublisher.NO_OP
+                    ? retrievalEngine.execute(retrievalPlan)
+                    : retrievalEngine.execute(retrievalPlan, eventPublisher);
+            eventPublisher.complete(
+                    handle,
+                    retrievalEventDetails(retrievalPlan, knowledgeBases, queryIndex, queryCount, result.chunks().size())
+            );
+            Map<String, Object> payload = new LinkedHashMap<>(retrievalEventDetails(
+                    retrievalPlan, knowledgeBases, queryIndex, queryCount, result.chunks().size()));
+            payload.put("requestId", result.requestId());
+            payload.put("elapsedMs", durationMs(traceStart));
+            recordTrace("retrieval", "retrieval.completed", payload);
+            return result;
+        } catch (RagServiceException ex) {
+            eventPublisher.fail(handle, ex.errorCode().name());
+            recordTrace("retrieval", "retrieval.failed", Map.of(
+                    "errorCode", ex.errorCode().name(),
+                    "error", summarize(ex),
+                    "queryIndex", queryIndex,
+                    "queryCount", queryCount,
+                    "elapsedMs", durationMs(traceStart)
+            ));
+            throw ex;
+        } catch (RuntimeException ex) {
+            eventPublisher.fail(handle, RagErrorCode.RETRIEVAL_FAILED.name());
+            recordTrace("retrieval", "retrieval.failed", Map.of(
+                    "errorCode", RagErrorCode.RETRIEVAL_FAILED.name(),
+                    "error", summarize(ex),
+                    "queryIndex", queryIndex,
+                    "queryCount", queryCount,
+                    "elapsedMs", durationMs(traceStart)
+            ));
+            throw new RagServiceException(
+                    RagErrorCode.RETRIEVAL_FAILED,
+                    "知识检索失败: " + summarize(ex),
+                    ex
+            );
+        }
+    }
+
+    private List<Map<String, Object>> resolveKnowledgeBaseSummaries(RetrievalPlan retrievalPlan) {
+        Map<String, KnowledgeBaseMeta> knowledgeBasesById = metadataQueryService
+                .listKnowledgeBases(KnowledgeBaseQueryCondition.all())
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        KnowledgeBaseMeta::knowledgeBaseId,
+                        knowledgeBase -> knowledgeBase
+                ));
+        return retrievalPlan.recallSpecs().stream()
+                .map(spec -> {
+                    KnowledgeBaseMeta knowledgeBase = knowledgeBasesById.get(spec.knowledgeBaseId());
+                    String name = knowledgeBase != null ? knowledgeBase.name() : spec.knowledgeBaseId();
+                    return Map.<String, Object>of(
+                            "knowledgeBaseId", spec.knowledgeBaseId(),
+                            "name", name
+                    );
+                })
+                .toList();
+    }
+
+    private static Map<String, Object> retrievalEventDetails(
+            RetrievalPlan retrievalPlan,
+            List<Map<String, Object>> knowledgeBases,
+            int queryIndex,
+            int queryCount,
+            Integer resultCount
+    ) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("knowledgeBaseCount", retrievalPlan.recallSpecs().size());
+        details.put("knowledgeBases", knowledgeBases);
+        details.put("queryIndex", queryIndex);
+        details.put("queryCount", queryCount);
+        if (resultCount != null) {
+            details.put("resultCount", resultCount);
+        }
+        return Map.copyOf(details);
+    }
+
+    private RetrievalResult executeRetrievalWithRewrite(
+            String originalQuery,
+            Boolean queryRewrite,
+            String queryRewritePrompt,
+            RetrievalPlan basePlan,
+            RagProcessEventPublisher eventPublisher
+    ) {
+        long summaryStart = System.nanoTime();
+        List<Map<String, Object>> knowledgeBases = resolveKnowledgeBaseSummaries(basePlan);
+        if (null == queryRewrite || Boolean.FALSE.equals(queryRewrite)) {
+            recordTrace("query_rewrite", "query_rewrite.summary", Map.of(
+                    "originalQuery", originalQuery,
+                    "enabled", false,
+                    "rewrittenCount", 0,
+                    "totalQueryCount", 1,
+                    "rewrittenQueries", List.of(),
+                    "elapsedMs", 0
+            ));
+            RetrievalResult result = executeRetrieval(basePlan, eventPublisher, 1, 1);
+            recordTrace("retrieval", "retrieval.summary", retrievalSummaryPayload(
+                    originalQuery,
+                    List.of(),
+                    List.of(originalQuery),
+                    knowledgeBases,
+                    List.of(result),
+                    result,
+                    false,
+                    0,
+                    rankingMode(result, "single_query"),
+                    durationMs(summaryStart)
+            ));
+            return result;
+        }
+
+        List<String> subQueries = rewriteQuery(originalQuery, queryRewritePrompt, eventPublisher);
+        List<String> allQueries = new ArrayList<>();
+        allQueries.add(originalQuery);
+        allQueries.addAll(subQueries);
+        log.info("Query 改写完成，原始query + 子query数={}", allQueries.size());
+
+        List<RetrievalResult> results = new ArrayList<>(allQueries.size());
+        for (int i = 0; i < allQueries.size(); i++) {
+            results.add(executeRetrieval(withQuery(basePlan, allQueries.get(i)), eventPublisher, i + 1, allQueries.size()));
+        }
+
+        List<RetrievedChunk> merged = mergeChunks(results);
+        recordTrace("retrieval", "retrieval.rewrite_merge.started", Map.of(
+                "queryCount", allQueries.size(),
+                "inputResultCount", results.stream().mapToInt(result -> result.chunks().size()).sum(),
+                "dedupedCount", merged.size()
+        ));
+
+        ModelEndpointSpec rerankModel = extractRerankModel(basePlan);
+        boolean rerankApplied = rerankModel != null && !merged.isEmpty();
+        long finalRerankMs = 0;
+        if (rerankModel != null && !merged.isEmpty()) {
+            long rerankStart = System.nanoTime();
+            merged = withKnowledgeBaseNames(merged, knowledgeBases);
+            merged = eventPublisher == RagProcessEventPublisher.NO_OP
+                    ? retrievalEngine.rerank(originalQuery, merged, rerankModel, basePlan.topK())
+                    : retrievalEngine.rerank(
+                            originalQuery,
+                            merged,
+                            rerankModel,
+                            basePlan.topK(),
+                            eventPublisher,
+                            "rewrite_merge"
+                    );
+            finalRerankMs = durationMs(rerankStart);
+        } else if (!merged.isEmpty()) {
+            merged = merged.stream()
+                    .sorted((a, b) -> Double.compare(b.rankingScore(), a.rankingScore()))
+                    .limit(basePlan.topK())
+                    .toList();
+        }
+
+        recordTrace("retrieval", "retrieval.rewrite_merge.completed", Map.of(
+                "queryCount", allQueries.size(),
+                "mergedCount", merged.size(),
+                "finalCount", merged.size(),
+                "rerankApplied", rerankApplied
+        ));
+        RetrievalResult finalResult = new RetrievalResult(UUID.randomUUID().toString(), merged, Map.of(
+                "ranking_mode", rerankApplied ? "rewrite_merge_rerank" : "rewrite_merge_score_sort",
+                "final_rerank_ms", finalRerankMs
+        ));
+        recordTrace("retrieval", "retrieval.summary", retrievalSummaryPayload(
+                originalQuery,
+                subQueries,
+                allQueries,
+                knowledgeBases,
+                results,
+                finalResult,
+                rerankApplied,
+                finalRerankMs,
+                rerankApplied ? "rewrite_merge_rerank" : "rewrite_merge_score_sort",
+                durationMs(summaryStart)
+        ));
+        return finalResult;
+    }
+
+    private static List<RetrievedChunk> withKnowledgeBaseNames(
+            List<RetrievedChunk> chunks,
+            List<Map<String, Object>> knowledgeBases
+    ) {
+        Map<String, String> namesById = new LinkedHashMap<>();
+        for (Map<String, Object> knowledgeBase : knowledgeBases) {
+            Object knowledgeBaseId = knowledgeBase.get("knowledgeBaseId");
+            Object name = knowledgeBase.get("name");
+            if (knowledgeBaseId != null && name != null) {
+                namesById.put(knowledgeBaseId.toString(), name.toString());
+            }
+        }
+        if (namesById.isEmpty()) {
+            return chunks;
+        }
+        return chunks.stream()
+                .map(chunk -> withKnowledgeBaseName(chunk, namesById.get(chunk.knowledgeBaseId())))
+                .toList();
+    }
+
+    private static RetrievedChunk withKnowledgeBaseName(RetrievedChunk chunk, String knowledgeBaseName) {
+        if (knowledgeBaseName == null || knowledgeBaseName.isBlank()) {
+            return chunk;
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>(chunk.metadata());
+        metadata.put("knowledgeBaseName", knowledgeBaseName);
+        return new RetrievedChunk(
+                chunk.chunkId(),
+                chunk.documentId(),
+                chunk.knowledgeBaseId(),
+                chunk.vectorScore(),
+                chunk.sparseScore(),
+                chunk.rankingScore(),
+                chunk.content(),
+                metadata
+        );
+    }
+
+    private Map<String, Object> retrievalSummaryPayload(
+            String originalQuery,
+            List<String> rewrittenQueries,
+            List<String> executedQueries,
+            List<Map<String, Object>> knowledgeBases,
+            List<RetrievalResult> queryResults,
+            RetrievalResult finalResult,
+            boolean finalRerankApplied,
+            long finalRerankMs,
+            String finalRankingMode,
+            long elapsedMs
+    ) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("requestId", finalResult.requestId());
+        payload.put("originalQuery", originalQuery);
+        payload.put("rewrittenCount", rewrittenQueries.size());
+        payload.put("rewrittenQueries", rewrittenQueries);
+        payload.put("executedQueryCount", executedQueries.size());
+        payload.put("executedQueries", executedQueries);
+        payload.put("knowledgeBaseCount", knowledgeBases.size());
+        payload.put("knowledgeBases", knowledgeBases);
+        payload.put("perQueryResults", perQueryResults(executedQueries, queryResults));
+        payload.put("candidateCount", candidateCount(queryResults, finalResult));
+        payload.put("finalChunkCount", finalResult.chunks().size());
+        payload.put("finalChunks", chunkSummaries(finalResult.chunks()));
+        payload.put("finalRerankApplied", finalRerankApplied);
+        payload.put("finalRerankMs", finalRerankMs);
+        payload.put("finalRankingMode", finalRankingMode);
+        payload.put("elapsedMs", elapsedMs);
+        return Map.copyOf(payload);
+    }
+
+    private static List<Map<String, Object>> perQueryResults(
+            List<String> executedQueries,
+            List<RetrievalResult> queryResults
+    ) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (int i = 0; i < queryResults.size(); i++) {
+            RetrievalResult result = queryResults.get(i);
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("queryIndex", i + 1);
+            if (i < executedQueries.size()) {
+                row.put("query", executedQueries.get(i));
+            }
+            row.put("requestId", result.requestId());
+            row.put("resultCount", result.chunks().size());
+            row.put("rankingMode", rankingMode(result, ""));
+            rows.add(row);
+        }
+        return List.copyOf(rows);
+    }
+
+    private static int candidateCount(List<RetrievalResult> queryResults, RetrievalResult finalResult) {
+        int total = queryResults.stream()
+                .map(RetrievalResult::debugTrace)
+                .mapToInt(trace -> numberValue(trace.get("candidate_count")))
+                .sum();
+        return total > 0 ? total : finalResult.chunks().size();
+    }
+
+    private static String rankingMode(RetrievalResult result, String fallback) {
+        Object rankingMode = result.debugTrace().get("ranking_mode");
+        return rankingMode == null ? fallback : Objects.toString(rankingMode, fallback);
+    }
+
+    private static int numberValue(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        return 0;
+    }
+
+    private static List<Map<String, Object>> chunkSummaries(List<RetrievedChunk> chunks) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (int i = 0; i < chunks.size(); i++) {
+            RetrievedChunk chunk = chunks.get(i);
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("rank", i + 1);
+            row.put("chunkId", chunk.chunkId());
+            row.put("documentId", chunk.documentId());
+            row.put("knowledgeBaseId", chunk.knowledgeBaseId());
+            row.put("vectorScore", chunk.vectorScore());
+            row.put("sparseScore", chunk.sparseScore());
+            row.put("rankingScore", chunk.rankingScore());
+            row.put("content", chunk.content());
+            row.put("metadata", chunk.metadata());
+            rows.add(row);
+        }
+        return List.copyOf(rows);
+    }
+
+    private List<String> rewriteQuery(
+            String originalQuery,
+            String queryRewritePrompt,
+            RagProcessEventPublisher eventPublisher
+    ) {
+        long start = System.nanoTime();
+        StageHandle handle = eventPublisher.start(RagProcessStage.QUERY_REWRITE, Map.of());
+
+        try {
+            String effectivePrompt = firstNonBlank(
+                    queryRewritePrompt,
+                    appProperties.getRag().getAnswer().getQueryRewrite().getDefaultPrompt()
+            );
+            ModelMeta llmModel = resolveLlmModel(null);
+            recordTrace("query_rewrite", "query_rewrite.started", Map.of(
+                    "originalQueryLength", originalQuery.length(),
+                    "originalQueryPreview", preview(originalQuery),
+                    "promptLength", effectivePrompt.length(),
+                    "modelId", llmModel.modelId()
+            ));
+            LlmRequest rewriteRequest = new LlmRequest(
+                    toEndpoint(llmModel),
+                    List.of(
+                            new LlmMessage(LlmMessageRole.SYSTEM, effectivePrompt),
+                            new LlmMessage(LlmMessageRole.USER, originalQuery)
+                    ),
+                    appProperties.getRag().getAnswer().getQueryRewrite().getTemperature(),
+                    256,
+                    null,
+                    null
+            );
+            recordTrace("query_rewrite", "query_rewrite.llm.request", Map.of(
+                    "modelId", llmModel.modelId(),
+                    "temperature", appProperties.getRag().getAnswer().getQueryRewrite().getTemperature(),
+                    "maxTokens", 256
+            ));
+            LlmResponse response = llmService.generate(rewriteRequest);
+            recordTrace("query_rewrite", "query_rewrite.llm.response", Map.of(
+                    "responseLength", response.content() == null ? 0 : response.content().length(),
+                    "responsePreview", preview(response.content()),
+                    "finishReason", Objects.toString(response.finishReason(), "")
+            ));
+            int maxQueries = appProperties.getRag().getAnswer().getQueryRewrite().getMaxRewriteQueries();
+            List<String> subQueries = parseRewrittenQueries(response.content(), maxQueries);
+            log.info("Query 改写生成子query数={}", subQueries.size());
+            eventPublisher.complete(handle, Map.of("queryCount", subQueries.size() + 1));
+            recordTrace("query_rewrite", "query_rewrite.summary", Map.of(
+                    "originalQuery", originalQuery,
+                    "rewrittenCount", subQueries.size(),
+                    "totalQueryCount", subQueries.size() + 1,
+                    "rewrittenQueries", subQueries,
+                    "modelId", llmModel.modelId(),
+                    "elapsedMs", durationMs(start)
+            ));
+            return subQueries;
+        } catch (Exception ex) {
+            log.warn("Query 改写失败，降级为原始query检索: {}", summarize(ex));
+            eventPublisher.fallback(handle, Map.of("queryCount", 1));
+            recordTrace("query_rewrite", "query_rewrite.summary", Map.of(
+                    "originalQuery", originalQuery,
+                    "rewrittenCount", 0,
+                    "totalQueryCount", 1,
+                    "rewrittenQueries", List.of(),
+                    "fallback", true,
+                    "reason", summarize(ex),
+                    "elapsedMs", durationMs(start)
+            ));
+            return List.of();
+        }
+    }
+
+    private List<String> parseRewrittenQueries(String content, int maxQueries) {
+        if (content == null || content.isBlank()) {
+            return List.of();
+        }
+        return content.lines()
+                .map(String::trim)
+                .filter(line -> !line.isEmpty())
+                .filter(line -> !line.matches("^\\d+[.、)\\s].*"))
+                .limit(maxQueries)
+                .toList();
+    }
+
+    private RetrievalPlan withQuery(RetrievalPlan plan, String newQuery) {
+        return new RetrievalPlan(
+                newQuery,
+                plan.embeddingSpec(),
+                plan.recallSpecs(),
+                plan.globalRankingSpec(),
+                plan.topK(),
+                plan.globalScoreThresholdEnabled(),
+                plan.globalScoreThreshold()
+        );
+    }
+
+    private List<RetrievedChunk> mergeChunks(List<RetrievalResult> results) {
+        Map<String, RetrievedChunk> deduped = new LinkedHashMap<>();
+        for (RetrievalResult result : results) {
+            for (RetrievedChunk chunk : result.chunks()) {
+                deduped.merge(chunk.chunkId(), chunk, (existing, incoming) ->
+                        incoming.rankingScore() > existing.rankingScore() ? incoming : existing
+                );
+            }
+        }
+        return List.copyOf(deduped.values());
+    }
+
+    private ModelEndpointSpec extractRerankModel(RetrievalPlan plan) {
+        if (plan.rankingSpec() instanceof RankingSpec.RerankRankingSpec rerankSpec) {
+            return rerankSpec.modelEndpoint();
+        }
+        return null;
+    }
+
+    private boolean shouldUseRetrievalContext(ApiModels.QueryRequest request) {
+        return tuningTopK(request) != null || tuningCandidateK(request) != null || tuningScoreThreshold(request) != null;
+    }
+
+    private boolean shouldUseRetrievalContext(ApiModels.RagAnswerRequest request) {
+        return tuningTopK(request) != null || tuningCandidateK(request) != null || tuningScoreThreshold(request) != null;
+    }
+
+    private ExecutionPlan preserveRequestPrompt(ExecutionPlan executionPlan, String requestSystemPrompt) {
+        if (normalize(requestSystemPrompt) == null) {
+            return executionPlan;
+        }
+        return new ExecutionPlan(
+                executionPlan.planType(),
+                executionPlan.query(),
+                requestSystemPrompt,
+                executionPlan.retrievalPlans(),
+                executionPlan.orchestrationOptions()
+        );
+    }
+
+    private int positiveOrZero(Integer value) {
+        return value == null || value <= 0 ? 0 : value;
+    }
+
+    private List<String> resolveKnowledgeBaseIds(List<String> docIds) {
+        return metadataQueryService.listKnowledgeBases(
+                new KnowledgeBaseQueryCondition(docIds)
+        ).stream()
+                .map(kb -> kb.knowledgeBaseId())
+                .toList();
+    }
+
+    private Map<String, String> resolveDocumentNames(List<RetrievedChunk> chunks) {
+        List<String> docIds = chunks.stream()
+                .map(RetrievedChunk::documentId)
+                .distinct()
+                .toList();
+        if (docIds.isEmpty()) {
+            return Map.of();
+        }
+        return metadataQueryService.getDocumentMetas(docIds).entrySet().stream()
+                .filter(entry -> entry.getValue().name() != null)
+                .collect(java.util.stream.Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> entry.getValue().name()
+                ));
+    }
+
+    private LlmResponse generateAnswer(LlmRequest llmRequest) {
+        long start = System.nanoTime();
+        recordTrace("answer_generation", "answer_generation.started", Map.of(
+                "model", llmRequest.modelEndpoint().model(),
+                "messageCount", llmRequest.messages().size(),
+                "stream", false
+        ));
+        try {
+            LlmResponse response = llmService.generate(llmRequest);
+            recordTrace("answer_generation", "answer_generation.summary", Map.of(
+                    "model", llmRequest.modelEndpoint().model(),
+                    "finishReason", Objects.toString(response.finishReason(), ""),
+                    "answerLength", response.content() == null ? 0 : response.content().length(),
+                    "answerContent", Objects.toString(response.content(), ""),
+                    "userPrompt", lastUserPrompt(llmRequest),
+                    "firstTokenMs", -1,
+                    "elapsedMs", durationMs(start),
+                    "stream", false
+            ));
+            return response;
+        } catch (RagServiceException ex) {
+            recordTrace("answer_generation", "answer_generation.failed", Map.of(
+                    "errorCode", ex.errorCode().name(),
+                    "message", summarize(ex),
+                    "elapsedMs", durationMs(start),
+                    "stream", false
+            ));
+            throw ex;
+        } catch (RuntimeException ex) {
+            recordTrace("answer_generation", "answer_generation.failed", Map.of(
+                    "errorCode", RagErrorCode.LLM_UNAVAILABLE.name(),
+                    "message", summarize(ex),
+                    "elapsedMs", durationMs(start),
+                    "stream", false
+            ));
+            throw new RagServiceException(
+                    RagErrorCode.LLM_UNAVAILABLE,
+                    "答案生成失败: " + summarize(ex),
+                    ex
+            );
+        }
+    }
+
+    private static String summarize(Throwable throwable) {
+        Throwable root = throwable;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        String message = normalizeStatic(root.getMessage());
+        return message != null ? message : root.getClass().getSimpleName();
+    }
+
+    private static String normalizeStatic(String value) {
+        return value == null || value.isBlank() ? null : value;
+    }
+
+    private void handleStreamChunk(
+            LlmStreamChunk chunk,
+            StringBuilder answerBuilder,
+            AtomicReference<String> finishReasonHolder,
+            AtomicReference<Map<String, Object>> metadataHolder,
+            PreparedAnswer preparedAnswer,
+            Consumer<StreamEvent> eventConsumer,
+            RagProcessEventPublisher eventPublisher,
+            StageHandle generationHandle,
+            AtomicBoolean firstTokenEmitted,
+            AtomicReference<Long> firstTokenMsHolder,
+            long generationStart
+    ) {
+        if (!chunk.delta().isEmpty()) {
+            if (firstTokenEmitted.compareAndSet(false, true)) {
+                firstTokenMsHolder.set(durationMs(generationStart));
+                eventPublisher.milestone(generationHandle, "first_token", Map.of());
+                recordTrace("answer_generation", "answer_generation.first_token", Map.of(
+                        "requestId", preparedAnswer.retrieval().requestId()
+                ));
+            }
+            answerBuilder.append(chunk.delta());
+            eventConsumer.accept(new StreamEvent("delta", new ApiModels.RagAnswerStreamDelta(chunk.delta())));
+        }
+        if (!chunk.metadata().isEmpty()) {
+            metadataHolder.set(chunk.metadata());
+        }
+        if (chunk.completed()) {
+            finishReasonHolder.set(chunk.finishReason());
+            log.info("流式问答处理完成，请求ID={}，结束原因={}，结果块数={}",
+                    preparedAnswer.retrieval().requestId(),
+                    chunk.finishReason(),
+                    preparedAnswer.retrieval().chunks().size());
+            Map<String, Object> metadata = new LinkedHashMap<>(metadataHolder.get());
+            metadata.put("llm_model_id", preparedAnswer.llmModel().modelId());
+            eventPublisher.complete(generationHandle, answerGenerationDetails(chunk.finishReason(), metadata));
+            Map<String, Object> tracePayload = new LinkedHashMap<>(answerGenerationDetails(chunk.finishReason(), metadata));
+            tracePayload.put("requestId", preparedAnswer.retrieval().requestId());
+            tracePayload.put("model", preparedAnswer.llmRequest().modelEndpoint().model());
+            tracePayload.put("answerLength", answerBuilder.length());
+            tracePayload.put("answerContent", answerBuilder.toString());
+            tracePayload.put("userPrompt", lastUserPrompt(preparedAnswer.llmRequest()));
+            tracePayload.put("firstTokenMs", Objects.requireNonNullElse(firstTokenMsHolder.get(), -1L));
+            tracePayload.put("stream", true);
+            tracePayload.put("elapsedMs", durationMs(generationStart));
+            recordTrace("answer_generation", "answer_generation.summary", tracePayload);
+            eventConsumer.accept(new StreamEvent("done", new ApiModels.RagAnswerStreamDone(
+                    chunk.finishReason(),
+                    Map.copyOf(metadata)
+            )));
+        }
+    }
+
+    private static Map<String, Object> answerGenerationDetails(
+            String finishReason,
+            Map<String, Object> metadata
+    ) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        if (finishReason != null && !finishReason.isBlank()) {
+            details.put("finishReason", finishReason);
+        }
+        copyIfPresent(metadata, details, "prompt_tokens", "promptTokens");
+        copyIfPresent(metadata, details, "completion_tokens", "completionTokens");
+        copyIfPresent(metadata, details, "total_tokens", "totalTokens");
+        return Map.copyOf(details);
+    }
+
+    private static String lastUserPrompt(LlmRequest llmRequest) {
+        List<LlmMessage> messages = llmRequest.messages();
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            LlmMessage message = messages.get(i);
+            if (message.role() == LlmMessageRole.USER) {
+                return Objects.toString(message.content(), "");
+            }
+        }
+        return "";
+    }
+
+    private static void copyIfPresent(
+            Map<String, Object> source,
+            Map<String, Object> target,
+            String sourceKey,
+            String targetKey
+    ) {
+        Object value = source.get(sourceKey);
+        if (value != null) {
+            target.put(targetKey, value);
+        }
+    }
+
+    /** 组装最终问答响应，并附带检索链路相关元数据。 */
+    private ApiModels.RagAnswerResponse toRagAnswerResponse(
+            String answer,
+            PreparedAnswer preparedAnswer
+    ) {
+        List<ApiModels.Reference> references = buildReferences(preparedAnswer.retrieval().chunks());
+        return new ApiModels.RagAnswerResponse(answer, references);
+    }
+
+    private List<ApiModels.Reference> buildReferences(List<RetrievedChunk> chunks) {
+        String difyFilesUrl = appProperties.getRag().getDifyFilesUrl();
+        return chunks.stream()
+                .map(chunk -> chunk.metadata())
+                .filter(metadata -> metadata.containsKey("document_name") && metadata.containsKey("upload_file_id"))
+                .map(metadata -> {
+                    String fileName = String.valueOf(metadata.get("document_name"));
+                    String uploadFileId = String.valueOf(metadata.get("upload_file_id"));
+                    String path = buildFilePath(difyFilesUrl, uploadFileId, fileName);
+                    return new ApiModels.Reference(fileName, path);
+                })
+                .distinct()
+                .toList();
+    }
+
+    private String buildFilePath(String difyFilesUrl, String uploadFileId, String fileName) {
+        if (difyFilesUrl == null || uploadFileId == null || fileName == null) {
+            return null;
+        }
+        int dotIndex = fileName.lastIndexOf('.');
+        String extension = dotIndex >= 0 ? fileName.substring(dotIndex + 1) : "";
+        String base = difyFilesUrl.endsWith("/") ? difyFilesUrl.substring(0, difyFilesUrl.length() - 1) : difyFilesUrl;
+        return extension.isEmpty()
+                ? base + "/" + uploadFileId
+                : base + "/" + uploadFileId + "." + extension;
+    }
+
+    private void recordTrace(String stage, String eventName, Map<String, Object> payload) {
+        if (!traceRecorder.enabled()) {
+            return;
+        }
+        if (!shouldRecordTraceEvent(eventName)) {
+            return;
+        }
+        traceRecorder.record(
+                Objects.toString(MDC.get("traceId"), "unknown"),
+                Objects.toString(payload.get("requestId"), null),
+                "app",
+                stage,
+                eventName,
+                payload
+        );
+    }
+
+    private boolean shouldRecordTraceEvent(String eventName) {
+        if (eventName == null || eventName.isBlank()) {
+            return false;
+        }
+        if (eventName.endsWith(".failed") || eventName.contains(".failed") || eventName.endsWith(".fallback")) {
+            return true;
+        }
+        return switch (traceProperties.getMode()) {
+            case OFF -> false;
+            case SUMMARY -> SUMMARY_TRACE_EVENTS.contains(eventName);
+            case DETAIL, DEBUG -> true;
+        };
+    }
+
+    private static Map<String, Object> planningPayload(ExecutionPlan plan, long elapsedMs) {
+        RetrievalPlan primary = plan.primaryRetrievalPlan();
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("planType", plan.planType().name());
+        payload.put("retrievalPlanCount", plan.retrievalPlans().size());
+        payload.put("primaryKbCount", primary.recallSpecs().size());
+        payload.put("topK", primary.topK());
+        payload.put("rankingMode", primary.rankingSpec().getClass().getSimpleName());
+        payload.put("embeddingModel", primary.embeddingSpec().modelEndpoint().model());
+        if (primary.rankingSpec() instanceof RankingSpec.RerankRankingSpec rerankSpec) {
+            payload.put("rerankModel", rerankSpec.modelEndpoint().model());
+        }
+        payload.put("elapsedMs", elapsedMs);
+        return Map.copyOf(payload);
+    }
+
+    private static long durationMs(long startNano) {
+        return (System.nanoTime() - startNano) / 1_000_000;
+    }
+
+    private static String preview(String text) {
+        if (text == null) {
+            return "";
+        }
+        String normalized = text.replaceAll("\\s+", " ").trim();
+        return normalized.length() <= 120 ? normalized : normalized.substring(0, 120);
+    }
+
+    public record StreamEvent(String name, Object payload) {
+    }
+
+    private record PreparedAnswer(
+            ExecutionPlan executionPlan,
+            RetrievalResult retrieval,
+            ModelMeta llmModel,
+            LlmRequest llmRequest
+    ) {
+    }
+}

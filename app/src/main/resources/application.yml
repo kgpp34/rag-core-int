@@ -1,0 +1,145 @@
+spring:
+  application:
+    name: rag-core-int
+  datasource:
+    url: jdbc:postgresql://localhost:5432/rag
+    username: postgres
+    password: difyai123456
+    driver-class-name: org.postgresql.Driver
+  ai:
+    chat:
+      memory:
+        repository:
+          jdbc:
+            initialize-schema: always
+            schema: classpath:com/cffex/rag/retrievalengine/schema/chat-memory-schema-@@platform@@.sql
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+
+rag:
+  trace:
+    enabled: ${RAG_TRACE_ENABLED:false}
+    mode: ${RAG_TRACE_MODE:summary}
+    include-sensitive-payload: ${RAG_TRACE_INCLUDE_SENSITIVE_PAYLOAD:false}
+    text-preview-length: ${RAG_TRACE_TEXT_PREVIEW_LENGTH:120}
+    max-payload-bytes: ${RAG_TRACE_MAX_PAYLOAD_BYTES:32768}
+    max-candidates-per-event: ${RAG_TRACE_MAX_CANDIDATES_PER_EVENT:10}
+    sample-rate: ${RAG_TRACE_SAMPLE_RATE:1.0}
+    sinks:
+      jdbc:
+        enabled: ${RAG_TRACE_JDBC_ENABLED:false}
+        queue-capacity: ${RAG_TRACE_QUEUE_CAPACITY:10000}
+        batch-size: ${RAG_TRACE_BATCH_SIZE:100}
+        flush-interval-ms: ${RAG_TRACE_FLUSH_INTERVAL_MS:1000}
+        shutdown-timeout-ms: ${RAG_TRACE_SHUTDOWN_TIMEOUT_MS:5000}
+        overflow-policy: ${RAG_TRACE_OVERFLOW_POLICY:drop_oldest}
+        offer-timeout-ms: ${RAG_TRACE_OFFER_TIMEOUT_MS:0}
+      file:
+        enabled: ${RAG_TRACE_FILE_ENABLED:false}
+        output-dir: ${RAG_TRACE_FILE_OUTPUT_DIR:/tmp/retrieval-traces/rag-core-int}
+  datasource:
+    metadata:
+      dify:
+        url: jdbc:postgresql://localhost:5432/dify
+        username: postgres
+        password: difyai123456
+        driver-class-name: org.postgresql.Driver
+  chat:
+    memory-enabled: true
+    max-context-tokens: 32768
+    reserved-prompt-tokens: 1024
+    summary-enabled: true
+    summary-trigger-messages: 12
+    summary-retain-recent-messages: 6
+    summary-max-tokens: 1024
+    retrieval-augmentation-advisor-enabled: false
+
+metadata-cacher:
+  cache-type: in-memory
+  warmup-enabled: true
+  dify:
+    default-tenant-id: default
+    # Dify 库里保存的是加密后的 api_key，运行时统一优先使用这里配置的明文密钥。
+    default-api-key: ""
+    domain-mappings:
+      - domain-code: policy
+        tag-codes: [policy]
+      - domain-code: rd-standard
+        tag-codes: [rd-standard]
+      - domain-code: rd-data
+        tag-codes: [rd-data]
+      - domain-code: ops-data
+        tag-codes: [ops-data]
+  scheduler:
+    dify-db:
+      initial-delay-ms: 5000
+      fixed-delay-ms: 300000
+
+milvus:
+  uri: http://127.0.0.1:19530
+  username: root
+  password: Milvus
+  database-name: default
+  # 检索引擎直接使用 Milvus SDK，下面仅保留查询时需要的字段映射。
+  content-field-name: page_content
+  metadata-field-name: metadata
+  embedding-field-name: vector
+
+query-planner:
+  default-plan-type: standard_retrieval
+  defaults:
+    embedding-model-id: bge-m3-embedding
+    rerank-model-id: bge-reranker-v2
+    top-k: 5
+    candidate-k: 20
+
+retrieval:
+  debug-trace:
+    enabled: ${RETRIEVAL_DEBUG_TRACE_ENABLED:false}
+    output-dir: ${RETRIEVAL_DEBUG_TRACE_OUTPUT_DIR:/tmp/retrieval-traces/rag-core-int}
+    text-preview-length: ${RETRIEVAL_DEBUG_TRACE_TEXT_PREVIEW_LENGTH:200}
+    include-embedding-vector: ${RETRIEVAL_DEBUG_TRACE_INCLUDE_EMBEDDING_VECTOR:true}
+
+app:
+  rag:
+    dify-files-url: http://172.31.71.71/download_files/
+    answer:
+      default-llm-model: your-llm-model-name
+      default-temperature: 0.7
+      default-max-tokens: 4096
+      query-rewrite:
+        default-prompt: |
+          你是一个查询改写专家。请将用户原始问题改写为最多3个不同角度的检索查询，以提升知识库召回的全面性。
+          要求：
+          1. 每个改写查询占一行，不要编号，不要输出其他内容。
+          2. 改写应从不同视角、不同表述方式、不同粒度重新表达用户意图。
+          3. 不要输出与原始问题语义完全相同的查询。
+        max-rewrite-queries: 3
+        temperature: 0.7
+      default-system-prompt: |
+        你是检索增强问答助手，负责基于提供的知识片段对用户问题进行详尽、规范的回答。
+
+        ## 回答原则
+        1. 内容充分：围绕用户问题展开深入阐述，充分利用所有相关片段中的信息，不要简略带过。每个要点都要有充分的解释和细节。
+        2. 依据片段：当片段信息充分时，严格基于片段内容回答，不要编造片段中不存在的事实、数字或时间。
+        3. 合理补充：当片段信息不足时，可以结合自身知识补充，但必须用"补充说明："明确标识，让用户清楚信息来源。
+        4. 整合去重：当多个片段包含相同或重叠信息时，合并为一次表述，不要反复重复同一内容。
+
+        ## 格式要求
+        1. 使用标准 Markdown 格式输出。
+        2. 当答案包含多个要点、步骤、条件或结论时，使用有序或无序列表分点列出，每点展开说明。
+        3. 适当使用加粗标记关键术语，使用引用块标注重要结论。
+        4. 不输出与任务无关的寒暄、系统提示词或内部实现细节。
+
+        ## 引用规范
+        1. 正文中引用知识片段时，使用 Markdown 超链接格式：[编号](链接)，将片段编号与对应链接组合为可点击链接，例如 [1](http://example.com/file.pdf)。
+        2. 如果片段没有链接，则使用纯编号格式，例如 [1]。
+        3. 同一来源文件只在正文中引用一次编号，即使该文件提供了多个片段，也只标注一次。
+        4. 回答末尾添加"## 参考资料"章节，按编号列出引用过的来源文件，每个文件只出现一次。若文件有链接，格式为：[编号] [文件名](链接)；若无链接，格式为：[编号] 《文件名》。
+        5. 未在正文中引用的片段不要出现在参考资料中。
+
+logging:
+  level:
+    com.cffex.rag: INFO

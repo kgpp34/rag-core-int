@@ -1,0 +1,14 @@
+/target/
+**/target/
+.idea/
+.vscode/
+.claude/
+*.iml
+.DS_Store
+__pycache__/
+*.pyc
+.env
+env
+logs/
+app/logs/
+rag.tar

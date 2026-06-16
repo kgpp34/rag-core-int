@@ -1,0 +1,10 @@
+.git
+.idea
+.claude
+**/target
+!app/target/
+!app/target/app-0.1.0-SNAPSHOT.jar
+**/.DS_Store
+logs
+README.md
+docs
