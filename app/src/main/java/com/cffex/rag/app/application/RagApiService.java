@@ -8,6 +8,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -822,10 +826,7 @@ public class RagApiService {
         allQueries.addAll(subQueries);
         log.info("Query 改写完成，原始query + 子query数={}", allQueries.size());
 
-        List<RetrievalResult> results = new ArrayList<>(allQueries.size());
-        for (int i = 0; i < allQueries.size(); i++) {
-            results.add(executeRetrieval(withQuery(basePlan, allQueries.get(i)), eventPublisher, i + 1, allQueries.size()));
-        }
+        List<RetrievalResult> results = executeRetrievalQueriesInParallel(basePlan, allQueries, eventPublisher);
 
         List<RetrievedChunk> merged = mergeChunks(results);
         recordTrace("retrieval", "retrieval.rewrite_merge.started", Map.of(
@@ -881,6 +882,61 @@ public class RagApiService {
                 durationMs(summaryStart)
         ));
         return finalResult;
+    }
+
+    private List<RetrievalResult> executeRetrievalQueriesInParallel(
+            RetrievalPlan basePlan,
+            List<String> allQueries,
+            RagProcessEventPublisher eventPublisher
+    ) {
+        Map<String, String> capturedMdc = MDC.getCopyOfContextMap();
+        List<Callable<RetrievalResult>> tasks = new ArrayList<>(allQueries.size());
+        for (int i = 0; i < allQueries.size(); i++) {
+            String query = allQueries.get(i);
+            int queryIndex = i + 1;
+            tasks.add(() -> {
+                restoreMdc(capturedMdc);
+                try {
+                    return executeRetrieval(withQuery(basePlan, query), eventPublisher, queryIndex, allQueries.size());
+                } finally {
+                    MDC.clear();
+                }
+            });
+        }
+
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<RetrievalResult>> futures = executor.invokeAll(tasks);
+            List<RetrievalResult> results = new ArrayList<>(futures.size());
+            for (Future<RetrievalResult> future : futures) {
+                results.add(future.get());
+            }
+            return List.copyOf(results);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new RagServiceException(
+                    RagErrorCode.RETRIEVAL_FAILED,
+                    "改写查询并行检索被中断，请稍后重试",
+                    ex
+            );
+        } catch (ExecutionException ex) {
+            Throwable cause = ex.getCause() == null ? ex : ex.getCause();
+            if (cause instanceof RagServiceException ragServiceException) {
+                throw ragServiceException;
+            }
+            throw new RagServiceException(
+                    RagErrorCode.RETRIEVAL_FAILED,
+                    "改写查询并行检索失败: " + summarize(cause),
+                    cause
+            );
+        }
+    }
+
+    private static void restoreMdc(Map<String, String> capturedMdc) {
+        if (capturedMdc == null || capturedMdc.isEmpty()) {
+            MDC.clear();
+            return;
+        }
+        MDC.setContextMap(capturedMdc);
     }
 
     private static List<RetrievedChunk> withKnowledgeBaseNames(

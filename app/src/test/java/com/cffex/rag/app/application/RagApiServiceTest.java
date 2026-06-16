@@ -3,9 +3,12 @@ package com.cffex.rag.app.application;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -362,6 +365,61 @@ class RagApiServiceTest {
         assertEquals("http://dify.example.com/v1/files/file-abc.pdf", response.references().get(0).path());
         assertEquals("技术标准.docx", response.references().get(1).fileName());
         assertEquals("http://dify.example.com/v1/files/file-xyz.docx", response.references().get(1).path());
+    }
+
+    @Test
+    void search_executesRewrittenQueriesInParallel() {
+        ExecutionPlan executionPlan = sampleExecutionPlan(null);
+        when(queryPlannerFacade.plan(any(QueryPlanRequest.class))).thenReturn(executionPlan);
+        when(metadataQueryService.listModels(any())).thenReturn(List.of(
+                new ModelMeta("llm-default", "qwen-test", ModelType.LLM, "http://llm", "secret", true)
+        ));
+        when(metadataQueryService.listKnowledgeBases(any())).thenReturn(List.of(
+                new com.cffex.rag.common.domain.metadata.KnowledgeBaseMeta(
+                        "kb-1",
+                        com.cffex.rag.common.domain.metadata.RetrievalMode.HYBRID,
+                        "collection-1",
+                        true
+                )
+        ));
+        when(llmService.generate(any())).thenReturn(new LlmResponse("rewrite hello", "stop", Map.of()));
+
+        CountDownLatch retrievalsEntered = new CountDownLatch(2);
+        doAnswer(invocation -> {
+            RetrievalPlan plan = invocation.getArgument(0, RetrievalPlan.class);
+            retrievalsEntered.countDown();
+            assertTrue(
+                    retrievalsEntered.await(2, TimeUnit.SECONDS),
+                    "rewritten queries should be retrieved in parallel"
+            );
+            return new RetrievalResult(
+                    "req-" + plan.query(),
+                    List.of(new RetrievedChunk(
+                            "chunk-" + plan.query(),
+                            "doc-1",
+                            "kb-1",
+                            0.9,
+                            0.2,
+                            0.8,
+                            "content " + plan.query(),
+                            Map.of()
+                    )),
+                    Map.of()
+            );
+        }).when(retrievalEngine).execute(any(RetrievalPlan.class));
+
+        ApiModels.RetrievalResponse response = ragApiService.search(new ApiModels.QueryRequest(
+                "hello",
+                List.of("doc-1"),
+                null,
+                null,
+                null,
+                new ApiModels.QueryRewriteConfig(true, "rewrite prompt")
+        ));
+
+        assertEquals(2, response.chunks().size());
+        assertEquals("chunk-hello", response.chunks().get(0).chunkId());
+        assertEquals("chunk-rewrite hello", response.chunks().get(1).chunkId());
     }
 
     @Test
