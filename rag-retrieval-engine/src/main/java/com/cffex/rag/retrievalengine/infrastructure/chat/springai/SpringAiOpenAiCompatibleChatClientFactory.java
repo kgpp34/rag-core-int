@@ -72,7 +72,8 @@ public class SpringAiOpenAiCompatibleChatClientFactory implements ChatClientFact
             .webClientBuilder(HTTP1_WEB_CLIENT_BUILDER)
             .build();
         OpenAiChatOptions.Builder optionsBuilder = OpenAiChatOptions.builder()
-            .model(request.modelPolicy().model());
+            .model(request.modelPolicy().model())
+            .streamUsage(true);
         if (request.temperature() != null) {
             optionsBuilder.temperature(request.temperature());
         }

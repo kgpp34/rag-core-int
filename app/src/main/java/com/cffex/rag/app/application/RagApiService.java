@@ -15,6 +15,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -75,6 +76,8 @@ public class RagApiService {
             "retrieval.summary",
             "answer_generation.summary"
     );
+    private static final Pattern REFERENCE_HEADING_PATTERN = Pattern.compile("(?m)^##\\s*参考资料\\s*$");
+    private static final Pattern REFERENCE_CITATION_PATTERN = Pattern.compile("\\[(\\d+)](?:\\([^)]*\\))?");
 
     private final MetadataQueryService metadataQueryService;
     private final QueryPlannerFacade queryPlannerFacade;
@@ -469,31 +472,36 @@ public class RagApiService {
         messages.add(new LlmMessage(LlmMessageRole.SYSTEM, resolveSystemPrompt(executionPlan.systemPrompt())));
 
         Map<String, String> docNames = resolveDocumentNames(chunks);
-        String difyFilesUrl = appProperties.getRag().getDifyFilesUrl();
+        List<ReferenceSource> referenceSources = buildReferenceSources(chunks, docNames);
 
         StringBuilder prompt = new StringBuilder();
         prompt.append("请基于下面检索到的知识片段回答用户问题。");
         prompt.append('\n').append("如果知识片段不足以支持结论，请明确说明。");
+        prompt.append('\n').append("引用要求：正文和参考资料必须使用下面“可引用来源”的来源编号；同一个来源编号最多出现一次。");
         prompt.append('\n').append('\n').append("用户问题：").append(request.query());
+        if (!referenceSources.isEmpty()) {
+            prompt.append('\n').append('\n').append("可引用来源：");
+            for (ReferenceSource source : referenceSources) {
+                prompt.append('\n')
+                        .append('[').append(source.index()).append("] ")
+                        .append(source.fileName());
+                if (source.path() != null) {
+                    prompt.append(" 链接：").append(source.path());
+                }
+            }
+        }
         prompt.append('\n').append('\n').append("知识片段：");
         for (int i = 0; i < chunks.size(); i++) {
             RetrievedChunk chunk = chunks.get(i);
             String docName = docNames.get(chunk.documentId());
             Map<String, Object> metadata = chunk.metadata();
+            ReferenceSource referenceSource = findReferenceSource(referenceSources, chunk, docName);
             prompt.append('\n')
-                    .append('[').append(i + 1).append(']');
-            if (docName != null) {
+                    .append("[片段 ").append(i + 1).append(']');
+            if (referenceSource != null) {
+                prompt.append(" 来源编号：[").append(referenceSource.index()).append(']');
+            } else if (docName != null) {
                 prompt.append(" 来源：").append(docName);
-            }
-            if (difyFilesUrl != null
-                    && metadata.containsKey("document_name")
-                    && metadata.containsKey("upload_file_id")) {
-                String fileName = String.valueOf(metadata.get("document_name"));
-                String uploadFileId = String.valueOf(metadata.get("upload_file_id"));
-                String fileUrl = buildFilePath(difyFilesUrl, uploadFileId, fileName);
-                if (fileUrl != null) {
-                    prompt.append(" 链接：").append(fileUrl);
-                }
             }
             prompt.append('\n')
                     .append(chunk.content());
@@ -1231,6 +1239,64 @@ public class RagApiService {
                 ));
     }
 
+    private List<ReferenceSource> buildReferenceSources(
+            List<RetrievedChunk> chunks,
+            Map<String, String> docNames
+    ) {
+        String difyFilesUrl = appProperties.getRag().getDifyFilesUrl();
+        Map<String, ReferenceSource> sources = new LinkedHashMap<>();
+        for (RetrievedChunk chunk : chunks) {
+            Map<String, Object> metadata = chunk.metadata();
+            String metadataFileName = metadataValue(metadata, "document_name");
+            String uploadFileId = metadataValue(metadata, "upload_file_id");
+            String fileName = firstNonBlank(metadataFileName, docNames.get(chunk.documentId()));
+            if (fileName == null) {
+                continue;
+            }
+            String path = buildFilePath(difyFilesUrl, uploadFileId, metadataFileName);
+            String key = referenceSourceKey(chunk.documentId(), fileName, uploadFileId, path);
+            sources.computeIfAbsent(key, ignored -> new ReferenceSource(
+                    sources.size() + 1,
+                    key,
+                    fileName,
+                    path
+            ));
+        }
+        return List.copyOf(sources.values());
+    }
+
+    private ReferenceSource findReferenceSource(
+            List<ReferenceSource> sources,
+            RetrievedChunk chunk,
+            String docName
+    ) {
+        Map<String, Object> metadata = chunk.metadata();
+        String fileName = metadataValue(metadata, "document_name");
+        String uploadFileId = metadataValue(metadata, "upload_file_id");
+        fileName = firstNonBlank(fileName, docName);
+        if (fileName == null) {
+            return null;
+        }
+        String path = buildFilePath(appProperties.getRag().getDifyFilesUrl(), uploadFileId, fileName);
+        String key = referenceSourceKey(chunk.documentId(), fileName, uploadFileId, path);
+        return sources.stream()
+                .filter(source -> source.key().equals(key))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static String metadataValue(Map<String, Object> metadata, String key) {
+        Object value = metadata.get(key);
+        return value == null ? null : normalizeStatic(String.valueOf(value));
+    }
+
+    private static String referenceSourceKey(String documentId, String fileName, String uploadFileId, String path) {
+        if (uploadFileId != null) {
+            return "upload:" + uploadFileId + ":" + fileName + ":" + Objects.toString(path, "");
+        }
+        return "document:" + Objects.toString(documentId, "") + ":" + fileName;
+    }
+
     private LlmResponse generateAnswer(LlmRequest llmRequest) {
         long start = System.nanoTime();
         recordTrace("answer_generation", "answer_generation.started", Map.of(
@@ -1382,8 +1448,82 @@ public class RagApiService {
             String answer,
             PreparedAnswer preparedAnswer
     ) {
-        List<ApiModels.Reference> references = buildReferences(preparedAnswer.retrieval().chunks());
-        return new ApiModels.RagAnswerResponse(answer, references);
+        String normalizedAnswer = deduplicateReferenceSection(answer);
+        List<ApiModels.Reference> references = filterReferencesByAnswerCitations(
+                buildReferences(preparedAnswer.retrieval().chunks()),
+                normalizedAnswer
+        );
+        return new ApiModels.RagAnswerResponse(normalizedAnswer, references);
+    }
+
+    private static String deduplicateReferenceSection(String answer) {
+        if (answer == null || answer.isBlank()) {
+            return answer;
+        }
+        java.util.regex.Matcher matcher = REFERENCE_HEADING_PATTERN.matcher(answer);
+        if (!matcher.find()) {
+            return answer;
+        }
+        int sectionStart = matcher.end();
+        String beforeReferences = answer.substring(0, sectionStart);
+        String referenceSection = answer.substring(sectionStart);
+        String[] lines = referenceSection.split("\\R", -1);
+        Set<String> seenReferences = new java.util.LinkedHashSet<>();
+        List<String> deduplicated = new ArrayList<>(lines.length);
+        for (String line : lines) {
+            String normalized = normalizeReferenceLine(line);
+            if (normalized == null || seenReferences.add(normalized)) {
+                deduplicated.add(line);
+            }
+        }
+        return beforeReferences + String.join(System.lineSeparator(), deduplicated);
+    }
+
+    private static String normalizeReferenceLine(String line) {
+        String normalized = normalizeStatic(line);
+        if (normalized == null || normalized.startsWith("##")) {
+            return null;
+        }
+        return normalized.replaceFirst("^[-*]\\s*", "");
+    }
+
+    private static List<ApiModels.Reference> filterReferencesByAnswerCitations(
+            List<ApiModels.Reference> references,
+            String answer
+    ) {
+        if (references.isEmpty() || answer == null || answer.isBlank()) {
+            return List.of();
+        }
+        Set<Integer> citedIndexes = citedReferenceIndexes(answer);
+        if (citedIndexes.isEmpty()) {
+            return List.of();
+        }
+        List<ApiModels.Reference> citedReferences = new ArrayList<>();
+        for (int index = 0; index < references.size(); index++) {
+            if (citedIndexes.contains(index + 1)) {
+                citedReferences.add(references.get(index));
+            }
+        }
+        return List.copyOf(citedReferences);
+    }
+
+    private static Set<Integer> citedReferenceIndexes(String answer) {
+        String citationScope = answerContentBeforeReferences(answer);
+        java.util.regex.Matcher matcher = REFERENCE_CITATION_PATTERN.matcher(citationScope);
+        Set<Integer> citedIndexes = new java.util.LinkedHashSet<>();
+        while (matcher.find()) {
+            try {
+                citedIndexes.add(Integer.parseInt(matcher.group(1)));
+            } catch (NumberFormatException ignored) {
+                // Ignore malformed citation numbers.
+            }
+        }
+        return citedIndexes;
+    }
+
+    private static String answerContentBeforeReferences(String answer) {
+        java.util.regex.Matcher matcher = REFERENCE_HEADING_PATTERN.matcher(answer);
+        return matcher.find() ? answer.substring(0, matcher.start()) : answer;
     }
 
     private List<ApiModels.Reference> buildReferences(List<RetrievedChunk> chunks) {
@@ -1480,6 +1620,14 @@ public class RagApiService {
             RetrievalResult retrieval,
             ModelMeta llmModel,
             LlmRequest llmRequest
+    ) {
+    }
+
+    private record ReferenceSource(
+            int index,
+            String key,
+            String fileName,
+            String path
     ) {
     }
 }

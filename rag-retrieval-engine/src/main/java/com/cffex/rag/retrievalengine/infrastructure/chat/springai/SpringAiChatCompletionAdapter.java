@@ -72,7 +72,7 @@ public class SpringAiChatCompletionAdapter implements ChatCompletionPort {
                 .doOnNext(chatResponse -> {
                     String delta = assistantText(chatResponse);
                     Map<String, Object> metadata = responseMetadata(chatResponse, request);
-                    lastMetadata.set(metadata);
+                    lastMetadata.updateAndGet(previous -> mergeMetadata(previous, metadata));
                     String currentFinishReason = finishReason(chatResponse);
                     if (currentFinishReason != null && !currentFinishReason.isBlank()) {
                         finishReason.set(currentFinishReason);
@@ -193,5 +193,17 @@ public class SpringAiChatCompletionAdapter implements ChatCompletionPort {
         }
         metadata.putIfAbsent("model", request.modelPolicy().model());
         return Map.copyOf(metadata);
+    }
+
+    private static Map<String, Object> mergeMetadata(Map<String, Object> previous, Map<String, Object> current) {
+        if (previous == null || previous.isEmpty()) {
+            return current == null ? Map.of() : current;
+        }
+        if (current == null || current.isEmpty()) {
+            return previous;
+        }
+        Map<String, Object> merged = new LinkedHashMap<>(previous);
+        merged.putAll(current);
+        return Map.copyOf(merged);
     }
 }

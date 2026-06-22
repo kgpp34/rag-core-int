@@ -2,6 +2,7 @@ package com.cffex.rag.retrievalengine.infrastructure.chat.springai;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.openai.OpenAiChatOptions;
 
 class SpringAiOpenAiCompatibleChatClientFactoryTest {
 
@@ -30,5 +31,15 @@ class SpringAiOpenAiCompatibleChatClientFactoryTest {
 
         assertThat(resolution.baseUrl()).isEqualTo("https://dashscope.aliyuncs.com/compatible-mode/v1");
         assertThat(resolution.completionsPath()).isEqualTo("/chat/completions");
+    }
+
+    @Test
+    void openAiChatOptionsBuilder_supportsStreamUsage() {
+        OpenAiChatOptions options = OpenAiChatOptions.builder()
+                .model("gpt-test")
+                .streamUsage(true)
+                .build();
+
+        assertThat(options.getStreamUsage()).isTrue();
     }
 }

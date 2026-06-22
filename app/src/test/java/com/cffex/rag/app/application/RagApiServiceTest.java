@@ -355,16 +355,91 @@ class RagApiServiceTest {
         when(metadataQueryService.listModels(any())).thenReturn(List.of(
                 new ModelMeta("llm-default", "qwen-test", ModelType.LLM, "http://llm", "secret", true)
         ));
-        when(llmService.generate(any())).thenReturn(new LlmResponse("answer", "stop", Map.of()));
+        when(llmService.generate(any())).thenReturn(new LlmResponse("answer [1](http://dify.example.com/v1/files/file-abc.pdf) [2](http://dify.example.com/v1/files/file-xyz.docx)", "stop", Map.of()));
 
         ApiModels.RagAnswerResponse response = ragApiService.answer(simpleAnswerRequest("hello"));
 
-        assertEquals("answer", response.answer());
+        assertEquals("answer [1](http://dify.example.com/v1/files/file-abc.pdf) [2](http://dify.example.com/v1/files/file-xyz.docx)", response.answer());
         assertEquals(2, response.references().size());
         assertEquals("政策文件.pdf", response.references().get(0).fileName());
         assertEquals("http://dify.example.com/v1/files/file-abc.pdf", response.references().get(0).path());
         assertEquals("技术标准.docx", response.references().get(1).fileName());
         assertEquals("http://dify.example.com/v1/files/file-xyz.docx", response.references().get(1).path());
+
+        ArgumentCaptor<LlmRequest> llmCaptor = ArgumentCaptor.forClass(LlmRequest.class);
+        verify(llmService).generate(llmCaptor.capture());
+        String userPrompt = llmCaptor.getValue().messages().get(1).content();
+        assertTrue(userPrompt.contains("[1] 政策文件.pdf 链接：http://dify.example.com/v1/files/file-abc.pdf"));
+        assertTrue(userPrompt.contains("[片段 1] 来源编号：[1]"));
+        assertTrue(userPrompt.contains("[片段 2] 来源编号：[1]"));
+        assertTrue(userPrompt.contains("[片段 3] 来源编号：[2]"));
+    }
+
+    @Test
+    void answer_deduplicatesRepeatedReferenceLinesInGeneratedAnswer() {
+        stubPlanningAndRetrieval(null);
+        when(metadataQueryService.listModels(any())).thenReturn(List.of(
+                new ModelMeta("llm-default", "qwen-test", ModelType.LLM, "http://llm", "secret", true)
+        ));
+        when(llmService.generate(any())).thenReturn(new LlmResponse("""
+                答案正文。
+
+                ## 参考资料
+                [1] 《政策文件.pdf》
+                [1] 《政策文件.pdf》
+                [2] 《技术标准.docx》
+                """, "stop", Map.of()));
+
+        ApiModels.RagAnswerResponse response = ragApiService.answer(simpleAnswerRequest("hello"));
+
+        assertEquals("""
+                答案正文。
+
+                ## 参考资料
+                [1] 《政策文件.pdf》
+                [2] 《技术标准.docx》
+                """, response.answer());
+    }
+
+    @Test
+    void answer_omitsReferencesWhenGeneratedAnswerDoesNotCiteSources() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getRag().setDifyFilesUrl("http://dify.example.com/v1/files");
+        appProperties.getRag().getAnswer().setDefaultLlmModel("qwen-test");
+        appProperties.getRag().getAnswer().setDefaultTemperature(0.2d);
+        appProperties.getRag().getAnswer().setDefaultMaxTokens(4096);
+        appProperties.getRag().getAnswer().setDefaultSystemPrompt("configured prompt");
+        ragApiService = new RagApiService(
+                metadataQueryService,
+                queryPlannerFacade,
+                retrievalEngine,
+                llmService,
+                appProperties,
+                conversationMemoryService
+        );
+
+        ExecutionPlan executionPlan = sampleExecutionPlan(null);
+        RetrievalPlan plan = executionPlan.primaryRetrievalPlan();
+        when(queryPlannerFacade.plan(any(QueryPlanRequest.class))).thenReturn(executionPlan);
+        when(retrievalEngine.execute(plan)).thenReturn(new RetrievalResult(
+                "req-1",
+                List.of(new RetrievedChunk("chunk-1", "doc-1", "kb-1", 0.9, 0.2, 0.8, "unrelated content",
+                        Map.of("document_name", "无关文件.pdf", "upload_file_id", "file-unrelated"))),
+                Map.of()
+        ));
+        when(metadataQueryService.listModels(any())).thenReturn(List.of(
+                new ModelMeta("llm-default", "qwen-test", ModelType.LLM, "http://llm", "secret", true)
+        ));
+        when(llmService.generate(any())).thenReturn(new LlmResponse(
+                "当前检索结果与问题明显不相关，无法基于参考资料回答。",
+                "stop",
+                Map.of()
+        ));
+
+        ApiModels.RagAnswerResponse response = ragApiService.answer(simpleAnswerRequest("hello"));
+
+        assertEquals("当前检索结果与问题明显不相关，无法基于参考资料回答。", response.answer());
+        assertTrue(response.references().isEmpty());
     }
 
     @Test
