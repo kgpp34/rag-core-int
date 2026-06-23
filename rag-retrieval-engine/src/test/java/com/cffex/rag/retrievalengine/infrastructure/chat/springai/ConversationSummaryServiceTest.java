@@ -34,7 +34,7 @@ class ConversationSummaryServiceTest {
                 memoryRepository,
                 summaryRepository,
                 summarizer,
-                new ChatProperties(true, 32768, 1024, true, 4, 2, 256, false),
+                new ChatProperties(true, 1, 32768, 0.2d, true, 2, 256, false),
                 Runnable::run
         );
 
@@ -59,7 +59,7 @@ class ConversationSummaryServiceTest {
                 memoryRepository,
                 summaryRepository,
                 summarizer,
-                new ChatProperties(true, 32768, 1024, true, 4, 2, 256, false),
+                new ChatProperties(true, 1, 32768, 0.2d, true, 2, 256, false),
                 Runnable::run
         );
 

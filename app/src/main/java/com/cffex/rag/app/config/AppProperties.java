@@ -115,9 +115,18 @@ public class AppProperties {
 
     public static class QueryRewrite {
 
-        private String defaultPrompt;
+        private String defaultPrompt = """
+                你是一个查询改写专家。请将用户原始问题改写为最多3个不同角度的检索查询，以提升知识库召回的全面性。
+                要求：
+                1. 每个改写查询占一行，不要编号，不要输出其他内容。
+                2. 改写应从不同视角、不同表述方式、不同粒度重新表达用户意图。
+                3. 如果提供了历史问题，只有在当前问题明显依赖历史上下文时才参考历史；如果当前问题和历史问题毫无关系，必须忽略历史问题。
+                4. 不要输出与原始问题语义完全相同的查询。
+                """;
         private int maxRewriteQueries = 3;
         private Double temperature = 0.7d;
+        private boolean historyEnabled = true;
+        private int historyUserMessageLimit = 3;
 
         public String getDefaultPrompt() {
             return defaultPrompt;
@@ -147,6 +156,27 @@ public class AppProperties {
                 throw new IllegalArgumentException("app.rag.answer.query-rewrite.temperature must not be negative");
             }
             this.temperature = temperature;
+        }
+
+        public boolean isHistoryEnabled() {
+            return historyEnabled;
+        }
+
+        public void setHistoryEnabled(boolean historyEnabled) {
+            this.historyEnabled = historyEnabled;
+        }
+
+        public int getHistoryUserMessageLimit() {
+            return historyUserMessageLimit;
+        }
+
+        public void setHistoryUserMessageLimit(int historyUserMessageLimit) {
+            if (historyUserMessageLimit < 0) {
+                throw new IllegalArgumentException(
+                        "app.rag.answer.query-rewrite.history-user-message-limit must not be negative"
+                );
+            }
+            this.historyUserMessageLimit = historyUserMessageLimit;
         }
     }
 }

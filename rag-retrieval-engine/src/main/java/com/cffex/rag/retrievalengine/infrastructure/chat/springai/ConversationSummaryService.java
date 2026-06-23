@@ -50,10 +50,18 @@ public final class ConversationSummaryService {
                 List<Message> history = chatMemoryRepository.findByConversationId(conversationId);
                 ConversationSummary previous = summaryRepository.findByConversationId(conversationId)
                         .orElse(new ConversationSummary(conversationId, "", 0));
-                int targetMessageCount = Math.max(0, history.size() - properties.summaryRetainRecentMessages());
+                int targetMessageCount = ConversationTurnSupport.recentWindowStart(
+                        history,
+                        0,
+                        properties.memoryWindowTurns()
+                );
                 int summarizedMessageCount = Math.min(previous.summarizedMessageCount(), targetMessageCount);
-                int unsummarizedCount = targetMessageCount - summarizedMessageCount;
-                if (unsummarizedCount < properties.summaryTriggerMessages()) {
+                int unsummarizedTurns = ConversationTurnSupport.countUserTurns(
+                        history,
+                        summarizedMessageCount,
+                        targetMessageCount
+                );
+                if (unsummarizedTurns < properties.summaryTriggerTurns()) {
                     return;
                 }
 

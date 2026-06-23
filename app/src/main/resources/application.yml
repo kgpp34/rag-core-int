@@ -47,13 +47,20 @@ rag:
         password: difyai123456
         driver-class-name: org.postgresql.Driver
   chat:
-    memory-enabled: true
-    max-context-tokens: 32768
-    reserved-prompt-tokens: 1024
-    summary-enabled: true
-    summary-trigger-messages: 12
-    summary-retain-recent-messages: 6
-    summary-max-tokens: 1024
+    # 是否启用回答侧对话记忆。请求仍需传 memory.conversationId 才会使用对应会话历史。
+    memory-enabled: ${RAG_CHAT_MEMORY_ENABLED:true}
+    # 回答生成时优先保留最近多少轮 user/assistant 原文历史；一轮约等于一次用户问题 + 一次助手回答。
+    memory-window-turns: ${RAG_CHAT_MEMORY_WINDOW_TURNS:10}
+    # 单次请求实际使用的上下文预算上限。不要简单等同于模型理论上下文，少卡部署建议 32768 或 65536。
+    max-request-context-tokens: ${RAG_CHAT_MAX_REQUEST_CONTEXT_TOKENS:32768}
+    # 记忆最多占用单次上下文预算的比例，剩余空间优先留给当前问题、系统提示词和 RAG 检索片段。
+    memory-token-budget-ratio: ${RAG_CHAT_MEMORY_TOKEN_BUDGET_RATIO:0.2}
+    # 是否为更早历史生成摘要。摘要在 assistant 回复成功写入后异步检查并更新，不阻塞本轮回答。
+    summary-enabled: ${RAG_CHAT_SUMMARY_ENABLED:true}
+    # 更早未摘要历史累计多少轮后触发一次摘要；最近 memory-window-turns 轮始终优先保留原文。
+    summary-trigger-turns: ${RAG_CHAT_SUMMARY_TRIGGER_TURNS:10}
+    # 单次摘要输出的最大 token 数，建议控制在 512-1024，避免摘要本身占用过多上下文。
+    summary-max-tokens: ${RAG_CHAT_SUMMARY_MAX_TOKENS:512}
     retrieval-augmentation-advisor-enabled: false
 
 metadata-cacher:
@@ -115,9 +122,12 @@ app:
           要求：
           1. 每个改写查询占一行，不要编号，不要输出其他内容。
           2. 改写应从不同视角、不同表述方式、不同粒度重新表达用户意图。
-          3. 不要输出与原始问题语义完全相同的查询。
+          3. 如果提供了历史问题，只有在当前问题明显依赖历史上下文时才参考历史；如果当前问题和历史问题毫无关系，必须忽略历史问题。
+          4. 不要输出与原始问题语义完全相同的查询。
         max-rewrite-queries: 3
         temperature: 0.7
+        history-enabled: true
+        history-user-message-limit: 3
       default-system-prompt: |
         你是检索增强问答助手，负责基于提供的知识片段对用户问题进行详尽、规范的回答。
 

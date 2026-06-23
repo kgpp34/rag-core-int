@@ -22,27 +22,29 @@ class TokenBudgetChatMemoryTest {
     @Test
     void get_returnsRecentMessagesWithinBudgetWhileRepositoryKeepsCompleteHistory() {
         InMemoryChatMemoryRepository repository = new InMemoryChatMemoryRepository();
-        TokenBudgetChatMemory memory = memory(repository, new InMemorySummaryRepository(), 17);
+        TokenBudgetChatMemory memory = memory(repository, new InMemorySummaryRepository(), 18, 2);
         List<Message> history = List.of(
-                new UserMessage("old"),
-                new AssistantMessage("middle"),
-                new UserMessage("new")
+                new UserMessage("q1"),
+                new AssistantMessage("a1"),
+                new UserMessage("q2"),
+                new AssistantMessage("a2"),
+                new UserMessage("q3")
         );
 
         memory.add(CONVERSATION_ID, history);
 
         assertThat(memory.get(CONVERSATION_ID))
                 .extracting(Message::getText)
-                .containsExactly("middle", "new");
+                .containsExactly("q2", "a2", "q3");
         assertThat(repository.findByConversationId(CONVERSATION_ID))
                 .extracting(Message::getText)
-                .containsExactly("old", "middle", "new");
+                .containsExactly("q1", "a1", "q2", "a2", "q3");
     }
 
     @Test
     void get_returnsEmptyHistoryWhenNoBudgetRemains() {
         InMemoryChatMemoryRepository repository = new InMemoryChatMemoryRepository();
-        TokenBudgetChatMemory memory = memory(repository, new InMemorySummaryRepository(), 0);
+        TokenBudgetChatMemory memory = memory(repository, new InMemorySummaryRepository(), 0, 10);
         memory.add(CONVERSATION_ID, new UserMessage("hello"));
 
         assertThat(memory.get(CONVERSATION_ID)).isEmpty();
@@ -54,7 +56,7 @@ class TokenBudgetChatMemoryTest {
         InMemoryChatMemoryRepository repository = new InMemoryChatMemoryRepository();
         InMemorySummaryRepository summaryRepository = new InMemorySummaryRepository();
         summaryRepository.save(new ConversationSummary(CONVERSATION_ID, "earlier facts", 2));
-        TokenBudgetChatMemory memory = memory(repository, summaryRepository, 100);
+        TokenBudgetChatMemory memory = memory(repository, summaryRepository, 100, 10);
         memory.add(CONVERSATION_ID, List.of(
                 new UserMessage("old question"),
                 new AssistantMessage("old answer"),
@@ -69,9 +71,10 @@ class TokenBudgetChatMemoryTest {
     private TokenBudgetChatMemory memory(
             InMemoryChatMemoryRepository repository,
             InMemorySummaryRepository summaryRepository,
-            int maxTokens
+            int maxTokens,
+            int memoryWindowTurns
     ) {
-        ChatProperties properties = new ChatProperties(true, 32768, 1024, false, 12, 6, 1024, false);
+        ChatProperties properties = new ChatProperties(true, memoryWindowTurns, 32768, 0.2d, false, 10, 512, false);
         ConversationSummaryService summaryService = new ConversationSummaryService(
                 repository, summaryRepository, (policy, summary, messages, tokens) -> "", properties, Runnable::run);
         return new TokenBudgetChatMemory(
@@ -80,7 +83,8 @@ class TokenBudgetChatMemoryTest {
                 summaryService,
                 new ChatModelPolicy("https://llm.example.com", "token", "model"),
                 new TextLengthEstimator(),
-                maxTokens
+                maxTokens,
+                memoryWindowTurns
         );
     }
 

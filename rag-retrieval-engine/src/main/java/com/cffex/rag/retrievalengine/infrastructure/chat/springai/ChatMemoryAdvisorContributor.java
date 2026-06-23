@@ -69,9 +69,9 @@ public class ChatMemoryAdvisorContributor implements ChatAdvisorContributor {
             int memoryTokenBudget = resolveMemoryTokenBudget(request);
             if (memoryTokenBudget == 0) {
                 log.warn("[ChatMemory] 历史上下文 token 预算为 0，将不注入历史消息。"
-                                + " maxContextTokens={}, reservedPromptTokens={}, outputTokens={}, requestTokens={}",
-                        properties.maxContextTokens(),
-                        properties.reservedPromptTokens(),
+                                + " maxRequestContextTokens={}, memoryTokenBudgetRatio={}, outputTokens={}, requestTokens={}",
+                        properties.maxRequestContextTokens(),
+                        properties.memoryTokenBudgetRatio(),
                         request.maxTokens(),
                         estimateRequestTokens(request));
             }
@@ -81,7 +81,8 @@ public class ChatMemoryAdvisorContributor implements ChatAdvisorContributor {
                     summaryService,
                     request.modelPolicy(),
                     tokenCountEstimator,
-                    memoryTokenBudget
+                    memoryTokenBudget,
+                    properties.memoryWindowTurns()
             );
 
             log.info("[ChatMemory] 创建 token 预算 Advisor, effectiveConversationId={}, memoryTokenBudget={}",
@@ -98,8 +99,18 @@ public class ChatMemoryAdvisorContributor implements ChatAdvisorContributor {
     int resolveMemoryTokenBudget(ChatCompletionRequest request) {
         int requestTokens = estimateRequestTokens(request);
         int outputTokens = request.maxTokens() == null ? 0 : request.maxTokens();
-        return Math.max(0, properties.maxContextTokens() - properties.reservedPromptTokens()
-                - outputTokens - requestTokens);
+        int maxRequestContextTokens = Math.max(0, properties.maxRequestContextTokens());
+        int availableTokens = Math.max(0, maxRequestContextTokens - outputTokens - requestTokens);
+        int ratioBudget = (int) Math.floor(maxRequestContextTokens * normalizedMemoryTokenBudgetRatio());
+        return Math.max(0, Math.min(availableTokens, ratioBudget));
+    }
+
+    private double normalizedMemoryTokenBudgetRatio() {
+        double ratio = properties.memoryTokenBudgetRatio();
+        if (Double.isNaN(ratio) || ratio <= 0.0d) {
+            return 0.0d;
+        }
+        return Math.min(1.0d, ratio);
     }
 
     private int estimateRequestTokens(ChatCompletionRequest request) {

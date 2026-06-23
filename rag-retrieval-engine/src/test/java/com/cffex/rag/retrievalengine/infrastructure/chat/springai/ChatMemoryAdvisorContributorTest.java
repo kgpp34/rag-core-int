@@ -21,7 +21,7 @@ class ChatMemoryAdvisorContributorTest {
 
         int budget = contributor.resolveMemoryTokenBudget(request("current prompt", 4096));
 
-        assertThat(budget).isEqualTo(27630);
+        assertThat(budget).isEqualTo(6553);
     }
 
     @Test
@@ -38,7 +38,7 @@ class ChatMemoryAdvisorContributorTest {
                 null,
                 null,
                 null,
-                new ChatProperties(true, 32768, 1024, true, 12, 6, 1024, false),
+                new ChatProperties(true, 10, 32768, 0.2d, true, 10, 512, false),
                 new TextLengthEstimator()
         );
     }

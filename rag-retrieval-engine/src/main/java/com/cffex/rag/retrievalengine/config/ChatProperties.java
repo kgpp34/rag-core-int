@@ -5,11 +5,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "rag.chat")
 public record ChatProperties(
         boolean memoryEnabled,
-        int maxContextTokens,
-        int reservedPromptTokens,
+        int memoryWindowTurns,
+        int maxRequestContextTokens,
+        double memoryTokenBudgetRatio,
         boolean summaryEnabled,
-        int summaryTriggerMessages,
-        int summaryRetainRecentMessages,
+        int summaryTriggerTurns,
         int summaryMaxTokens,
         boolean retrievalAugmentationAdvisorEnabled
 ) {

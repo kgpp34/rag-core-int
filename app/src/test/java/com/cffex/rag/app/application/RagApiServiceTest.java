@@ -17,6 +17,7 @@ import static org.mockito.ArgumentMatchers.any;
 import org.mockito.Mock;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -495,6 +496,61 @@ class RagApiServiceTest {
         assertEquals(2, response.chunks().size());
         assertEquals("chunk-hello", response.chunks().get(0).chunkId());
         assertEquals("chunk-rewrite hello", response.chunks().get(1).chunkId());
+    }
+
+    @Test
+    void answer_queryRewriteIncludesRecentUserHistoryWhenMemoryEnabled() {
+        ExecutionPlan executionPlan = sampleExecutionPlan(null);
+        when(queryPlannerFacade.plan(any(QueryPlanRequest.class))).thenReturn(executionPlan);
+        when(metadataQueryService.listModels(any())).thenReturn(List.of(
+                new ModelMeta("llm-default", "qwen-test", ModelType.LLM, "http://llm", "secret", true)
+        ));
+        doAnswer(invocation -> new ConversationMemoryContext("test-user", "conv-1"))
+                .when(conversationMemoryService)
+                .resolve(any());
+        when(conversationMemoryService.recentUserMessages("conv-1", 3)).thenReturn(List.of(
+                "程序化交易异常报送流程是什么？",
+                "需要准备哪些材料？"
+        ));
+        when(llmService.generate(any()))
+                .thenReturn(new LlmResponse("程序化交易异常报送处罚标准", "stop", Map.of()))
+                .thenReturn(new LlmResponse("answer", "stop", Map.of()));
+        when(retrievalEngine.execute(any(RetrievalPlan.class))).thenAnswer(invocation -> {
+            RetrievalPlan plan = invocation.getArgument(0, RetrievalPlan.class);
+            return new RetrievalResult(
+                    "req-" + plan.query(),
+                    List.of(new RetrievedChunk(
+                            "chunk-" + plan.query(),
+                            "doc-1",
+                            "kb-1",
+                            0.9,
+                            0.2,
+                            0.8,
+                            "content " + plan.query(),
+                            Map.of()
+                    )),
+                    Map.of()
+            );
+        });
+
+        ragApiService.answer(new ApiModels.RagAnswerRequest(
+                "那处罚标准呢？",
+                "test-user",
+                List.of("doc-1"),
+                null,
+                null,
+                null,
+                new ApiModels.MemoryConfig("conv-1"),
+                new ApiModels.QueryRewriteConfig(true, "rewrite prompt")
+        ));
+
+        ArgumentCaptor<LlmRequest> llmCaptor = ArgumentCaptor.forClass(LlmRequest.class);
+        verify(llmService, times(2)).generate(llmCaptor.capture());
+        String rewriteUserPrompt = llmCaptor.getAllValues().get(0).messages().get(1).content();
+        assertTrue(rewriteUserPrompt.contains("当前问题：那处罚标准呢？"));
+        assertTrue(rewriteUserPrompt.contains("最近历史问题："));
+        assertTrue(rewriteUserPrompt.contains("程序化交易异常报送流程是什么？"));
+        assertTrue(rewriteUserPrompt.contains("如果当前问题与历史问题毫无关系，请完全忽略历史问题"));
     }
 
     @Test

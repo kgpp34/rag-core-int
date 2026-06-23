@@ -31,6 +31,7 @@ final class TokenBudgetChatMemory implements ChatMemory {
     private final ChatModelPolicy modelPolicy;
     private final TokenCountEstimator tokenCountEstimator;
     private final int maxTokens;
+    private final int memoryWindowTurns;
 
     TokenBudgetChatMemory(
             ChatMemoryRepository repository,
@@ -38,7 +39,8 @@ final class TokenBudgetChatMemory implements ChatMemory {
             ConversationSummaryService summaryService,
             ChatModelPolicy modelPolicy,
             TokenCountEstimator tokenCountEstimator,
-            int maxTokens
+            int maxTokens,
+            int memoryWindowTurns
     ) {
         this.repository = Objects.requireNonNull(repository);
         this.summaryRepository = Objects.requireNonNull(summaryRepository);
@@ -46,6 +48,7 @@ final class TokenBudgetChatMemory implements ChatMemory {
         this.modelPolicy = Objects.requireNonNull(modelPolicy);
         this.tokenCountEstimator = Objects.requireNonNull(tokenCountEstimator);
         this.maxTokens = Math.max(0, maxTokens);
+        this.memoryWindowTurns = Math.max(0, memoryWindowTurns);
     }
 
     @Override
@@ -85,23 +88,23 @@ final class TokenBudgetChatMemory implements ChatMemory {
             }
         }
 
-        List<Message> recentMessages = new ArrayList<>();
-        for (int index = history.size() - 1; index >= lowerBound; index--) {
-            Message message = history.get(index);
-            int messageTokens = estimate(message);
-            if (usedTokens + messageTokens > maxTokens) {
-                break;
-            }
-            recentMessages.add(0, message);
-            usedTokens += messageTokens;
+        int recentStart = ConversationTurnSupport.recentWindowStart(history, lowerBound, memoryWindowTurns);
+        List<Message> recentMessages = new ArrayList<>(history.subList(recentStart, history.size()));
+        int recentTokens = recentMessages.stream().mapToInt(this::estimate).sum();
+        int availableRecentTokens = Math.max(0, maxTokens - usedTokens);
+        while (!recentMessages.isEmpty() && recentTokens > availableRecentTokens) {
+            Message removed = recentMessages.remove(0);
+            recentTokens -= estimate(removed);
         }
+        usedTokens += recentTokens;
         selected.addAll(recentMessages);
         log.info("[ChatMemory] 历史消息已装配, conversationId={}, historyCount={}, selectedCount={}, "
-                        + "recentCount={}, hasSummary={}, memoryTokenBudget={}, usedTokens={}",
+                        + "recentCount={}, memoryWindowTurns={}, hasSummary={}, memoryTokenBudget={}, usedTokens={}",
                 conversationId,
                 history.size(),
                 selected.size(),
                 recentMessages.size(),
+                memoryWindowTurns,
                 summary != null && summary.content() != null && !summary.content().isBlank(),
                 maxTokens,
                 usedTokens);

@@ -1,9 +1,16 @@
 package com.cffex.rag.retrievalengine.application;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import org.springframework.ai.chat.memory.ChatMemoryRepository;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 
 import com.cffex.rag.common.domain.memory.ConversationMemoryContext;
 import com.cffex.rag.common.domain.memory.ConversationMemoryRequest;
@@ -42,5 +49,21 @@ class DefaultConversationMemoryServiceTest {
                 new ConversationMemoryRequest("user-1", true, " ")));
 
         assertEquals(RagErrorCode.INVALID_REQUEST, ex.errorCode());
+    }
+
+    @Test
+    void recentUserMessages_returnsRecentUserMessagesInChronologicalOrder() {
+        ChatMemoryRepository repository = mock(ChatMemoryRepository.class);
+        when(repository.findByConversationId("conv-1")).thenReturn(List.of(
+                new UserMessage("first"),
+                new AssistantMessage("assistant"),
+                new UserMessage("second"),
+                new UserMessage("third")
+        ));
+        DefaultConversationMemoryService service = new DefaultConversationMemoryService(repository);
+
+        List<String> messages = service.recentUserMessages("conv-1", 2);
+
+        assertEquals(List.of("second", "third"), messages);
     }
 }

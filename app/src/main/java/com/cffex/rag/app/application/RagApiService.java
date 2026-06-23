@@ -153,7 +153,8 @@ public class RagApiService {
                     queryRewriteEnabled(request),
                     queryRewritePrompt(request),
                     plan,
-                    RagProcessEventPublisher.NO_OP
+                    RagProcessEventPublisher.NO_OP,
+                    null
             );
             log.info("检索请求处理完成，请求ID={}，结果块数={}，检索子计划数={}，召回规格数={}，排序策略={}",
                     result.requestId(),
@@ -576,20 +577,21 @@ public class RagApiService {
     ) {
         ExecutionPlan executionPlan = planAnswer(request);
         RetrievalPlan retrievalPlan = executionPlan.primaryRetrievalPlan();
-        RetrievalResult retrieval = executeRetrievalWithRewrite(
-                request.query(),
-                queryRewriteEnabled(request),
-                queryRewritePrompt(request),
-                retrievalPlan,
-                eventPublisher
-        );
-        ModelMeta llmModel = resolveLlmModel(null);
         ApiModels.MemoryConfig memory = request.memory();
         ConversationMemoryContext memoryContext = conversationMemoryService.resolve(new ConversationMemoryRequest(
                 request.userId(),
                 memory != null,
                 memory != null ? memory.conversationId() : null
         ));
+        RetrievalResult retrieval = executeRetrievalWithRewrite(
+                request.query(),
+                queryRewriteEnabled(request),
+                queryRewritePrompt(request),
+                retrievalPlan,
+                eventPublisher,
+                memoryContext.conversationId()
+        );
+        ModelMeta llmModel = resolveLlmModel(null);
         LlmRequest llmRequest = new LlmRequest(
                 toEndpoint(llmModel),
                 buildAnswerMessages(executionPlan, request, retrieval.chunks()),
@@ -799,7 +801,8 @@ public class RagApiService {
             Boolean queryRewrite,
             String queryRewritePrompt,
             RetrievalPlan basePlan,
-            RagProcessEventPublisher eventPublisher
+            RagProcessEventPublisher eventPublisher,
+            String conversationId
     ) {
         long summaryStart = System.nanoTime();
         List<Map<String, Object>> knowledgeBases = resolveKnowledgeBaseSummaries(basePlan);
@@ -828,7 +831,7 @@ public class RagApiService {
             return result;
         }
 
-        List<String> subQueries = rewriteQuery(originalQuery, queryRewritePrompt, eventPublisher);
+        List<String> subQueries = rewriteQuery(originalQuery, queryRewritePrompt, eventPublisher, conversationId);
         List<String> allQueries = new ArrayList<>();
         allQueries.add(originalQuery);
         allQueries.addAll(subQueries);
@@ -1079,7 +1082,8 @@ public class RagApiService {
     private List<String> rewriteQuery(
             String originalQuery,
             String queryRewritePrompt,
-            RagProcessEventPublisher eventPublisher
+            RagProcessEventPublisher eventPublisher,
+            String conversationId
     ) {
         long start = System.nanoTime();
         StageHandle handle = eventPublisher.start(RagProcessStage.QUERY_REWRITE, Map.of());
@@ -1090,17 +1094,20 @@ public class RagApiService {
                     appProperties.getRag().getAnswer().getQueryRewrite().getDefaultPrompt()
             );
             ModelMeta llmModel = resolveLlmModel(null);
+            List<String> historyUserMessages = queryRewriteHistory(conversationId);
+            String rewriteUserPrompt = buildRewriteUserPrompt(originalQuery, historyUserMessages);
             recordTrace("query_rewrite", "query_rewrite.started", Map.of(
                     "originalQueryLength", originalQuery.length(),
                     "originalQueryPreview", preview(originalQuery),
                     "promptLength", effectivePrompt.length(),
-                    "modelId", llmModel.modelId()
+                    "modelId", llmModel.modelId(),
+                    "historyUserMessageCount", historyUserMessages.size()
             ));
             LlmRequest rewriteRequest = new LlmRequest(
                     toEndpoint(llmModel),
                     List.of(
                             new LlmMessage(LlmMessageRole.SYSTEM, effectivePrompt),
-                            new LlmMessage(LlmMessageRole.USER, originalQuery)
+                            new LlmMessage(LlmMessageRole.USER, rewriteUserPrompt)
                     ),
                     appProperties.getRag().getAnswer().getQueryRewrite().getTemperature(),
                     256,
@@ -1110,7 +1117,8 @@ public class RagApiService {
             recordTrace("query_rewrite", "query_rewrite.llm.request", Map.of(
                     "modelId", llmModel.modelId(),
                     "temperature", appProperties.getRag().getAnswer().getQueryRewrite().getTemperature(),
-                    "maxTokens", 256
+                    "maxTokens", 256,
+                    "historyUserMessageCount", historyUserMessages.size()
             ));
             LlmResponse response = llmService.generate(rewriteRequest);
             recordTrace("query_rewrite", "query_rewrite.llm.response", Map.of(
@@ -1128,6 +1136,7 @@ public class RagApiService {
                     "totalQueryCount", subQueries.size() + 1,
                     "rewrittenQueries", subQueries,
                     "modelId", llmModel.modelId(),
+                    "historyUserMessageCount", historyUserMessages.size(),
                     "elapsedMs", durationMs(start)
             ));
             return subQueries;
@@ -1145,6 +1154,40 @@ public class RagApiService {
             ));
             return List.of();
         }
+    }
+
+    private List<String> queryRewriteHistory(String conversationId) {
+        AppProperties.QueryRewrite queryRewrite = appProperties.getRag().getAnswer().getQueryRewrite();
+        if (!queryRewrite.isHistoryEnabled()
+                || conversationId == null
+                || conversationId.isBlank()
+                || queryRewrite.getHistoryUserMessageLimit() <= 0) {
+            return List.of();
+        }
+        return conversationMemoryService.recentUserMessages(
+                conversationId,
+                queryRewrite.getHistoryUserMessageLimit()
+        );
+    }
+
+    private static String buildRewriteUserPrompt(String originalQuery, List<String> historyUserMessages) {
+        if (historyUserMessages == null || historyUserMessages.isEmpty()) {
+            return originalQuery;
+        }
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("当前问题：").append(originalQuery);
+        prompt.append('\n').append('\n').append("最近历史问题：");
+        for (int i = 0; i < historyUserMessages.size(); i++) {
+            prompt.append('\n')
+                    .append(i + 1)
+                    .append(". ")
+                    .append(historyUserMessages.get(i));
+        }
+        prompt.append('\n').append('\n')
+                .append("请判断当前问题是否依赖最近历史问题。")
+                .append("如果当前问题与历史问题毫无关系，请完全忽略历史问题，只基于当前问题改写；")
+                .append("如果当前问题是追问或省略了历史中的主题，请结合相关历史问题补全检索意图。");
+        return prompt.toString();
     }
 
     private List<String> parseRewrittenQueries(String content, int maxQueries) {

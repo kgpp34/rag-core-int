@@ -1,5 +1,7 @@
 package com.cffex.rag.common.service;
 
+import java.util.List;
+
 import com.cffex.rag.common.domain.memory.ConversationMemoryContext;
 import com.cffex.rag.common.domain.memory.ConversationMemoryRequest;
 
@@ -7,4 +9,8 @@ import com.cffex.rag.common.domain.memory.ConversationMemoryRequest;
 public interface ConversationMemoryService {
 
     ConversationMemoryContext resolve(ConversationMemoryRequest request);
+
+    default List<String> recentUserMessages(String conversationId, int limit) {
+        return List.of();
+    }
 }

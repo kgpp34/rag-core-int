@@ -18,7 +18,7 @@ class RetrievalAugmentationChatAdvisorProviderTest {
     @Test
     void advisors_returnsEmptyWhenFeatureDisabled() {
         RetrievalAugmentationChatAdvisorProvider provider = new RetrievalAugmentationChatAdvisorProvider(
-                new ChatProperties(false, 32768, 1024, true, 12, 6, 1024, false),
+                new ChatProperties(false, 10, 32768, 0.2d, true, 10, 512, false),
                 List.of(),
                 Mockito.mock(MultiKnowledgeBaseDocumentRetriever.class)
         );
@@ -29,7 +29,7 @@ class RetrievalAugmentationChatAdvisorProviderTest {
     @Test
     void advisors_buildsRetrievalAugmentationAdvisorWhenFeatureEnabled() {
         RetrievalAugmentationChatAdvisorProvider provider = new RetrievalAugmentationChatAdvisorProvider(
-                new ChatProperties(false, 32768, 1024, true, 12, 6, 1024, true),
+                new ChatProperties(false, 10, 32768, 0.2d, true, 10, 512, true),
                 List.of(Mockito.mock(QueryTransformer.class)),
                 Mockito.mock(MultiKnowledgeBaseDocumentRetriever.class)
         );
