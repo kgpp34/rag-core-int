@@ -96,6 +96,7 @@ class MetadataCacheQueryServiceTest {
         assertEquals(1, metas.size());
         assertEquals("Document A", metas.get("doc-a").name());
         assertEquals("file-a", metas.get("doc-a").uploadFileId());
+        assertEquals("upload_files/tenant-a/storage-a.pdf", metas.get("doc-a").uploadFileKey());
     }
 
     private MetadataSnapshot buildSnapshot(Map<String, String> documentMappings) {
@@ -109,8 +110,8 @@ class MetadataCacheQueryServiceTest {
                 Map.of(),
                 documentMappings,
                 Map.of(
-                        "doc-a", new DocumentMeta("doc-a", "kb-1", "Document A", "file-a"),
-                        "doc-b", new DocumentMeta("doc-b", "kb-2", "Document B", "file-b")
+                        "doc-a", new DocumentMeta("doc-a", "kb-1", "Document A", "file-a", "upload_files/tenant-a/storage-a.pdf"),
+                        "doc-b", new DocumentMeta("doc-b", "kb-2", "Document B", "file-b", "upload_files/tenant-a/storage-b.pdf")
                 ),
                 Map.of(
                         BusinessDomain.POLICY, List.of("kb-1"),

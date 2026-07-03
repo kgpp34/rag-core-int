@@ -6,7 +6,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Optional;
-import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -18,7 +17,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 /**
  * 请求链路日志过滤器。
  *
- * <p>负责为每个请求补齐 traceId，并在请求进入和结束时记录统一访问日志。
+ * <p>负责透传调用方提供的 traceId，并在请求进入和结束时记录统一访问日志。
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -35,12 +34,17 @@ public class TraceLoggingFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
         String traceId = Optional.ofNullable(request.getHeader(TRACE_ID_HEADER))
+                .map(String::trim)
                 .filter(value -> !value.isBlank())
-                .orElseGet(() -> UUID.randomUUID().toString());
+                .orElse("");
         long start = System.currentTimeMillis();
 
-        MDC.put(TRACE_ID_KEY, traceId);
-        response.setHeader(TRACE_ID_HEADER, traceId);
+        if (!traceId.isBlank()) {
+            MDC.put(TRACE_ID_KEY, traceId);
+            response.setHeader(TRACE_ID_HEADER, traceId);
+        } else {
+            MDC.remove(TRACE_ID_KEY);
+        }
         log.info("收到请求，请求方式={}，路径={}，查询串={}，traceId={}",
                 request.getMethod(),
                 request.getRequestURI(),

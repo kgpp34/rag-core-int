@@ -4,7 +4,7 @@
 
 当前项目已有两类与 trace 相关的能力：
 
-- HTTP 请求级 traceId：由 `TraceLoggingFilter` 写入 MDC，并通过 `X-Trace-Id` 贯穿请求。
+- HTTP 请求级 traceId：由调用方通过 `X-Trace-Id` 传入，`TraceLoggingFilter` 写入 MDC 并贯穿请求。
 - 检索调试 trace：由 `RetrievalDebugTraceWriter` 在检索链路中同步写入 JSONL 文件，覆盖 retrieval request、query preprocess、embedding、Milvus dense/sparse request/response、单库召回、rerank、全局排序等事件。
 
 后续需要把完整 RAG 链路事件异步写入数据库，用于排查检索效果、复盘 query 改写、多路召回、rerank 和答案生成过程。

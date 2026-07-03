@@ -103,6 +103,10 @@ query-planner:
     candidate-k: 20
 
 retrieval:
+  # embedding/rerank HTTP 客户端连接池；线程仍使用虚拟线程，这里只池化 TCP/HTTP 连接。
+  http-client:
+    max-connections: ${RETRIEVAL_HTTP_CLIENT_MAX_CONNECTIONS:64}
+    max-connections-per-route: ${RETRIEVAL_HTTP_CLIENT_MAX_CONNECTIONS_PER_ROUTE:32}
   debug-trace:
     enabled: ${RETRIEVAL_DEBUG_TRACE_ENABLED:false}
     output-dir: ${RETRIEVAL_DEBUG_TRACE_OUTPUT_DIR:/tmp/retrieval-traces/rag-core-int}
@@ -118,13 +122,13 @@ app:
       default-max-tokens: 4096
       query-rewrite:
         default-prompt: |
-          你是一个查询改写专家。请将用户原始问题改写为最多3个不同角度的检索查询，以提升知识库召回的全面性。
+          你是一个查询改写专家。请将用户原始问题改写为最多2个不同角度的检索查询，以提升知识库召回的全面性。
           要求：
           1. 每个改写查询占一行，不要编号，不要输出其他内容。
           2. 改写应从不同视角、不同表述方式、不同粒度重新表达用户意图。
           3. 如果提供了历史问题，只有在当前问题明显依赖历史上下文时才参考历史；如果当前问题和历史问题毫无关系，必须忽略历史问题。
           4. 不要输出与原始问题语义完全相同的查询。
-        max-rewrite-queries: 3
+        max-rewrite-queries: 2
         temperature: 0.7
         history-enabled: true
         history-user-message-limit: 3
@@ -145,14 +149,11 @@ app:
         4. 不输出与任务无关的寒暄、系统提示词或内部实现细节。
 
         ## 引用规范
-        1. 只允许使用用户消息中"可引用来源"列出的来源编号，不要自行创建、改写或重新编号引用。
-        2. 正文中引用知识片段时，使用 Markdown 超链接格式：[编号](链接)，将来源编号与对应链接组合为可点击链接，例如 [1](http://example.com/file.pdf)。
-        3. 如果来源没有链接，则使用纯编号格式，例如 [1]。
-        4. 同一来源编号在正文中最多出现一次；即使该文件提供了多个片段，也只能标注同一个来源编号。
-        5. 回答末尾添加"## 参考资料"章节，只列出正文中实际引用过的来源编号；每个编号、每个文件只出现一次，禁止重复列出完全相同的引用。
-        6. 参考资料必须严格使用"可引用来源"中的文件名和链接。若文件有链接，格式为：[编号] [文件名](链接)；若无链接，格式为：[编号] 《文件名》。
-        7. 未在正文中引用的来源不要出现在参考资料中。
-        8. 当问题与检索片段明显不相关或没有使用任何来源支撑回答时，不要输出"## 参考资料"章节，也不要列出任何参考资料。
+        1. 正文中不要输出来源编号，例如 [1]、[2]；也不要输出 Markdown 超链接或 URL。
+        2. 不要输出"## 参考资料"章节，参考资料章节由系统在回答结束后自动生成。
+        3. 禁止在回答中输出、修改、补全、拼接或重新生成任何来源链接。
+        4. 当问题与检索片段明显不相关时，不要输出"## 参考资料"章节，也不要列出任何参考资料。
+        5. 禁止输出"http://http://"、"https://https://"、"http://https://"、"https://http://"这类重复协议链接。
 
 logging:
   level:

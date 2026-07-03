@@ -1,0 +1,1327 @@
+[arthas@7]$ trace com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask execute '#cost > 1000'
+Press Q or Ctrl+C to abort.
+Affect(class count: 1 , method count: 3) cost in 252 ms, listenerId: 23
+
+`---ts=2026-06-24 18:38:40.192;thread_name=;id=7044;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[14383.495222ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+        `---[100.00% 14383.359445ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute() #85
+            `---[100.00% 14383.313796ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+                +---[0.00% 0.016494ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:recallPolicy() #98
+                +---[0.00% 0.012328ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #100
+                +---[0.00% 0.006758ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #102
+                +---[0.00% 0.006121ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #103
+                +---[0.00% 0.01073ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #103
+                +---[0.00% 0.010025ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #104
+                +---[0.00% 0.00873ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:docIds() #105
+                +---[0.00% 0.01056ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #101
+                +---[0.00% 0.002335ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #110
+                +---[0.00% 0.003929ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesDenseRoute() #112
+                +---[0.00% 0.014513ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesSparseRoute() #119
+                +---[0.50% 72.624225ms ] com.cffex.rag.retrievalengine.application.port.ParallelExecutionStrategy:invokeAll() #126
+                +---[0.00% 0.001951ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #135
+                +---[0.00% 0.002688ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #135
+                +---[0.00% 0.010788ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #136
+                +---[0.00% 0.001467ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #136
+                +---[0.00% 0.575846ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #137
+                +---[0.00% 0.027272ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #138
+                +---[0.00% 0.001851ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #140
+                +---[0.00% 0.033455ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:mergeCandidatesForRerank() #149
+                +---[0.00% 0.560419ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #154
+                +---[0.00% 0.016759ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService$RouteCandidates:<init>() #158
+                +---[99.47% 14306.820909ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:recall() #158
+                +---[0.00% 0.001031ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #170
+                +---[0.00% 0.002286ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #171
+                +---[0.00% 0.00217ms ] org.slf4j.Logger:debug() #169
+                +---[0.00% 0.001021ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #180
+                +---[0.00% 0.001987ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logFinalCandidates() #180
+                +---[0.00% 0.257803ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #181
+                +---[0.00% 9.07E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #185
+                +---[0.00% 0.014324ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #186
+                +---[0.00% 9.07E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #186
+                +---[0.00% 0.002846ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace$KbTrace:<init>() #193
+                +---[0.00% 0.004282ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace:addKbTrace() #184
+                +---[0.00% 0.001007ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #197
+                +---[0.00% 8.59E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #199
+                +---[0.00% 0.001024ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #200
+                +---[0.00% 8.58E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #200
+                `---[0.00% 0.003492ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #198
+
+`---ts=2026-06-24 18:38:40.199;thread_name=;id=7108;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[14664.082669ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+        `---[100.00% 14664.057391ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute() #85
+            `---[100.00% 14664.022238ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+                +---[0.00% 0.001962ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:recallPolicy() #98
+                +---[0.00% 0.001306ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #100
+                +---[0.00% 0.001572ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #102
+                +---[0.00% 9.0E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #103
+                +---[0.00% 0.001023ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #103
+                +---[0.00% 0.001417ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #104
+                +---[0.00% 9.3E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:docIds() #105
+                +---[0.00% 0.006982ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #101
+                +---[0.00% 0.001307ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #110
+                +---[0.00% 9.22E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesDenseRoute() #112
+                +---[0.00% 8.76E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesSparseRoute() #119
+                +---[0.45% 66.66306ms ] com.cffex.rag.retrievalengine.application.port.ParallelExecutionStrategy:invokeAll() #126
+                +---[0.00% 0.001215ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #135
+                +---[0.00% 0.009031ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #135
+                +---[0.00% 7.44E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #136
+                +---[0.00% 7.93E-4ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #136
+                +---[0.00% 0.358321ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #137
+                +---[0.00% 0.010258ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #138
+                +---[0.00% 0.008983ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #140
+                +---[0.00% 0.033059ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:mergeCandidatesForRerank() #149
+                +---[0.00% 0.504941ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #154
+                +---[0.00% 0.015503ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService$RouteCandidates:<init>() #158
+                +---[99.54% 14595.90281ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:recall() #158
+                +---[0.00% 0.006314ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #170
+                +---[0.00% 0.001433ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #171
+                +---[0.00% 0.002267ms ] org.slf4j.Logger:debug() #169
+                +---[0.00% 9.87E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #180
+                +---[0.00% 0.002026ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logFinalCandidates() #180
+                +---[0.00% 0.295452ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #181
+                +---[0.00% 9.44E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #185
+                +---[0.00% 0.001081ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #186
+                +---[0.00% 8.34E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #186
+                +---[0.00% 0.002221ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace$KbTrace:<init>() #193
+                +---[0.00% 0.010665ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace:addKbTrace() #184
+                +---[0.00% 0.001032ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #197
+                +---[0.00% 7.99E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #199
+                +---[0.00% 0.001068ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #200
+                +---[0.00% 7.36E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #200
+                `---[0.00% 0.006488ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #198
+
+`---ts=2026-06-24 18:38:40.199;thread_name=;id=7110;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[14966.429991ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+        `---[100.00% 14966.377048ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute() #85
+            `---[100.00% 14966.356353ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+                +---[0.00% 0.001524ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:recallPolicy() #98
+                +---[0.00% 9.62E-4ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #100
+                +---[0.00% 7.3E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #102
+                +---[0.00% 8.29E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #103
+                +---[0.00% 8.38E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #103
+                +---[0.00% 9.65E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #104
+                +---[0.00% 8.22E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:docIds() #105
+                +---[0.00% 0.015734ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #101
+                +---[0.00% 7.97E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #110
+                +---[0.00% 7.58E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesDenseRoute() #112
+                +---[0.00% 0.001279ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesSparseRoute() #119
+                +---[0.42% 62.942977ms ] com.cffex.rag.retrievalengine.application.port.ParallelExecutionStrategy:invokeAll() #126
+                +---[0.00% 0.002234ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #135
+                +---[0.00% 0.002327ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #135
+                +---[0.00% 0.001356ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #136
+                +---[0.00% 0.001267ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #136
+                +---[0.00% 0.513045ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #137
+                +---[0.00% 0.008834ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #138
+                +---[0.00% 0.002212ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #140
+                +---[0.00% 0.031823ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:mergeCandidatesForRerank() #149
+                +---[0.00% 0.48635ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #154
+                +---[0.00% 0.004555ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService$RouteCandidates:<init>() #158
+                +---[99.57% 14901.733365ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:recall() #158
+                +---[0.00% 0.001108ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #170
+                +---[0.00% 0.001627ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #171
+                +---[0.00% 0.002571ms ] org.slf4j.Logger:debug() #169
+                +---[0.00% 0.002929ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #180
+                +---[0.00% 0.003131ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logFinalCandidates() #180
+                +---[0.00% 0.398248ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #181
+                +---[0.00% 0.005179ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #185
+                +---[0.00% 0.001378ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #186
+                +---[0.00% 0.001211ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #186
+                +---[0.00% 0.004714ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace$KbTrace:<init>() #193
+                +---[0.00% 0.005489ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace:addKbTrace() #184
+                +---[0.00% 0.001896ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #197
+                +---[0.00% 0.010417ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #199
+                +---[0.00% 0.001372ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #200
+                +---[0.00% 0.001112ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #200
+                `---[0.00% 0.006755ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #198
+
+`---ts=2026-06-24 18:38:40.199;thread_name=;id=7106;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[15257.226336ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+        `---[100.00% 15257.192115ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute() #85
+            `---[100.00% 15257.162512ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+                +---[0.00% 0.00308ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:recallPolicy() #98
+                +---[0.00% 0.001873ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #100
+                +---[0.00% 0.011052ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #102
+                +---[0.00% 0.001372ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #103
+                +---[0.00% 0.001562ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #103
+                +---[0.00% 0.001993ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #104
+                +---[0.00% 0.002043ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:docIds() #105
+                +---[0.00% 0.009252ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #101
+                +---[0.00% 0.001535ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #110
+                +---[0.00% 0.00167ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesDenseRoute() #112
+                +---[0.00% 0.001415ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesSparseRoute() #119
+                +---[0.43% 65.010809ms ] com.cffex.rag.retrievalengine.application.port.ParallelExecutionStrategy:invokeAll() #126
+                +---[0.00% 0.008814ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #135
+                +---[0.00% 0.00255ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #135
+                +---[0.00% 0.001065ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #136
+                +---[0.00% 0.002231ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #136
+                +---[0.00% 0.588345ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #137
+                +---[0.00% 0.0095ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #138
+                +---[0.00% 0.002329ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #140
+                +---[0.00% 0.032888ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:mergeCandidatesForRerank() #149
+                +---[0.00% 0.538331ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #154
+                +---[0.00% 0.003759ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService$RouteCandidates:<init>() #158
+                +---[99.56% 15190.364059ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:recall() #158
+                +---[0.00% 0.00138ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #170
+                +---[0.00% 0.001509ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #171
+                +---[0.00% 0.001967ms ] org.slf4j.Logger:debug() #169
+                +---[0.00% 0.001035ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #180
+                +---[0.00% 0.002351ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logFinalCandidates() #180
+                +---[0.00% 0.347556ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #181
+                +---[0.00% 0.00137ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #185
+                +---[0.00% 9.71E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #186
+                +---[0.00% 0.004344ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #186
+                +---[0.00% 0.00212ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace$KbTrace:<init>() #193
+                +---[0.00% 0.004159ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace:addKbTrace() #184
+                +---[0.00% 0.00103ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #197
+                +---[0.00% 9.96E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #199
+                +---[0.00% 0.001012ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #200
+                +---[0.00% 8.16E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #200
+                `---[0.00% 0.003528ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #198
+
+`---ts=2026-06-24 18:38:40.200;thread_name=;id=7121;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[21022.167727ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+        `---[100.00% 21022.125184ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute() #85
+            `---[100.00% 21022.094277ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+                +---[0.00% 0.001529ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:recallPolicy() #98
+                +---[0.00% 8.93E-4ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #100
+                +---[0.00% 7.04E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #102
+                +---[0.00% 6.99E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #103
+                +---[0.00% 0.001472ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #103
+                +---[0.00% 0.001027ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #104
+                +---[0.00% 8.07E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:docIds() #105
+                +---[0.00% 0.003667ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #101
+                +---[0.00% 8.58E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #110
+                +---[0.00% 6.85E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesDenseRoute() #112
+                +---[0.00% 8.88E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesSparseRoute() #119
+                +---[0.32% 67.599744ms ] com.cffex.rag.retrievalengine.application.port.ParallelExecutionStrategy:invokeAll() #126
+                +---[0.00% 0.001227ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #135
+                +---[0.00% 0.001986ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #135
+                +---[0.00% 7.26E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #136
+                +---[0.00% 7.99E-4ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #136
+                +---[0.00% 0.305608ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #137
+                +---[0.00% 0.011215ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #138
+                +---[0.00% 0.001162ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #140
+                +---[0.00% 0.013725ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:mergeCandidatesForRerank() #149
+                +---[0.00% 0.282743ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #154
+                +---[0.00% 0.009938ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService$RouteCandidates:<init>() #158
+                +---[99.67% 20953.471653ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:recall() #158
+                +---[0.00% 0.001078ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #170
+                +---[0.00% 0.001551ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #171
+                +---[0.00% 0.00183ms ] org.slf4j.Logger:debug() #169
+                +---[0.00% 0.001799ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #180
+                +---[0.00% 0.00202ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logFinalCandidates() #180
+                +---[0.00% 0.238349ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #181
+                +---[0.00% 9.19E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #185
+                +---[0.00% 9.01E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #186
+                +---[0.00% 0.001348ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #186
+                +---[0.00% 0.002106ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace$KbTrace:<init>() #193
+                +---[0.00% 0.003403ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace:addKbTrace() #184
+                +---[0.00% 0.006868ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #197
+                +---[0.00% 9.64E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #199
+                +---[0.00% 8.56E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #200
+                +---[0.00% 8.81E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #200
+                `---[0.00% 0.002512ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #198
+
+`---ts=2026-06-24 18:38:40.192;thread_name=;id=7042;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[21351.485328ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+        `---[100.00% 21351.335299ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute() #85
+            `---[100.00% 21351.299471ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+                +---[0.00% 0.034727ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:recallPolicy() #98
+                +---[0.00% 0.009201ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #100
+                +---[0.00% 0.001529ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #102
+                +---[0.00% 0.007427ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #103
+                +---[0.00% 0.010403ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #103
+                +---[0.00% 0.011848ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #104
+                +---[0.00% 0.00447ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:docIds() #105
+                +---[0.00% 0.014863ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #101
+                +---[0.00% 0.028572ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #110
+                +---[0.00% 0.001286ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesDenseRoute() #112
+                +---[0.00% 0.016077ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesSparseRoute() #119
+                +---[0.33% 71.054395ms ] com.cffex.rag.retrievalengine.application.port.ParallelExecutionStrategy:invokeAll() #126
+                +---[0.00% 0.001097ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #135
+                +---[0.00% 0.007084ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #135
+                +---[0.00% 6.69E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #136
+                +---[0.00% 8.24E-4ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #136
+                +---[0.00% 0.374156ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #137
+                +---[0.00% 0.004167ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #138
+                +---[0.00% 0.001085ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #140
+                +---[0.00% 0.021341ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:mergeCandidatesForRerank() #149
+                +---[0.00% 0.294927ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #154
+                +---[0.00% 0.014997ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService$RouteCandidates:<init>() #158
+                +---[99.65% 21276.674981ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:recall() #158
+                +---[0.00% 0.00109ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #170
+                +---[0.00% 0.006441ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #171
+                +---[0.00% 0.001922ms ] org.slf4j.Logger:debug() #169
+                +---[0.00% 9.74E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #180
+                +---[0.00% 0.006647ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logFinalCandidates() #180
+                +---[0.00% 0.309511ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #181
+                +---[0.00% 0.001105ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #185
+                +---[0.00% 0.001255ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #186
+                +---[0.00% 0.006398ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #186
+                +---[0.00% 0.002197ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace$KbTrace:<init>() #193
+                +---[0.00% 0.004529ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace:addKbTrace() #184
+                +---[0.00% 0.001554ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #197
+                +---[0.00% 8.61E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #199
+                +---[0.00% 8.87E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #200
+                +---[0.00% 8.01E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #200
+                `---[0.00% 0.002936ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #198
+
+`---ts=2026-06-24 18:38:40.194;thread_name=;id=7053;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[21637.887206ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+        `---[100.00% 21637.812348ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute() #85
+            `---[100.00% 21637.779418ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+                +---[0.00% 0.002157ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:recallPolicy() #98
+                +---[0.00% 0.001424ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #100
+                +---[0.00% 9.18E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #102
+                +---[0.00% 0.001319ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #103
+                +---[0.00% 0.001023ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #103
+                +---[0.00% 0.001373ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #104
+                +---[0.00% 0.002993ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:docIds() #105
+                +---[0.00% 0.007186ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #101
+                +---[0.00% 7.37E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #110
+                +---[0.00% 0.00161ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesDenseRoute() #112
+                +---[0.00% 8.32E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesSparseRoute() #119
+                +---[0.32% 68.161749ms ] com.cffex.rag.retrievalengine.application.port.ParallelExecutionStrategy:invokeAll() #126
+                +---[0.00% 0.001279ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #135
+                +---[0.00% 0.001916ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #135
+                +---[0.00% 7.44E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #136
+                +---[0.00% 8.55E-4ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #136
+                +---[0.00% 0.317869ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #137
+                +---[0.00% 0.004295ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #138
+                +---[0.00% 0.001209ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #140
+                +---[0.00% 0.014859ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:mergeCandidatesForRerank() #149
+                +---[0.00% 0.303665ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #154
+                +---[0.00% 0.002524ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService$RouteCandidates:<init>() #158
+                +---[99.68% 21568.493112ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:recall() #158
+                +---[0.00% 9.57E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #170
+                +---[0.00% 0.002042ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #171
+                +---[0.00% 0.001864ms ] org.slf4j.Logger:debug() #169
+                +---[0.00% 0.00102ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #180
+                +---[0.00% 0.001743ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logFinalCandidates() #180
+                +---[0.00% 0.272169ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #181
+                +---[0.00% 0.001095ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #185
+                +---[0.00% 9.64E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #186
+                +---[0.00% 0.007587ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #186
+                +---[0.00% 0.00223ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace$KbTrace:<init>() #193
+                +---[0.00% 0.00337ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace:addKbTrace() #184
+                +---[0.00% 0.005217ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #197
+                +---[0.00% 8.84E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #199
+                +---[0.00% 8.56E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #200
+                +---[0.00% 7.99E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #200
+                `---[0.00% 0.003054ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #198
+
+`---ts=2026-06-24 18:38:40.193;thread_name=;id=7047;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[21961.039005ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+        `---[100.00% 21961.005098ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute() #85
+            `---[100.00% 21960.984129ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+                +---[0.00% 0.002097ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:recallPolicy() #98
+                +---[0.00% 0.001348ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #100
+                +---[0.00% 9.47E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #102
+                +---[0.00% 9.97E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #103
+                +---[0.00% 9.8E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #103
+                +---[0.00% 0.001203ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #104
+                +---[0.00% 7.9E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:docIds() #105
+                +---[0.00% 0.006787ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #101
+                +---[0.00% 7.34E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #110
+                +---[0.00% 9.06E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesDenseRoute() #112
+                +---[0.00% 0.002595ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesSparseRoute() #119
+                +---[0.34% 74.636723ms ] com.cffex.rag.retrievalengine.application.port.ParallelExecutionStrategy:invokeAll() #126
+                +---[0.00% 0.002108ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #135
+                +---[0.00% 0.002522ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #135
+                +---[0.00% 0.001125ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #136
+                +---[0.00% 0.001342ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #136
+                +---[0.00% 0.502361ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #137
+                +---[0.00% 0.009845ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #138
+                +---[0.00% 0.001897ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #140
+                +---[0.00% 0.022528ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:mergeCandidatesForRerank() #149
+                +---[0.00% 0.40265ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #154
+                +---[0.00% 0.0041ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService$RouteCandidates:<init>() #158
+                +---[99.65% 21883.25889ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:recall() #158
+                +---[0.00% 0.0015ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #170
+                +---[0.00% 0.005729ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #171
+                +---[0.00% 0.002366ms ] org.slf4j.Logger:debug() #169
+                +---[0.00% 0.001052ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #180
+                +---[0.00% 0.002123ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logFinalCandidates() #180
+                +---[0.00% 0.250957ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #181
+                +---[0.00% 0.001002ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #185
+                +---[0.00% 0.00106ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #186
+                +---[0.00% 9.31E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #186
+                +---[0.00% 0.002157ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace$KbTrace:<init>() #193
+                +---[0.00% 0.004068ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace:addKbTrace() #184
+                +---[0.00% 9.43E-4ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #197
+                +---[0.00% 8.28E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #199
+                +---[0.00% 0.006226ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #200
+                +---[0.00% 7.9E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #200
+                `---[0.00% 0.002833ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #198
+
+`---ts=2026-06-24 18:38:40.416;thread_name=;id=7163;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[22037.779754ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+        `---[100.00% 22037.675056ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute() #85
+            `---[100.00% 22037.656227ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+                +---[0.00% 0.002764ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:recallPolicy() #98
+                +---[0.00% 0.007605ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #100
+                +---[0.00% 0.001537ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #102
+                +---[0.00% 0.001377ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #103
+                +---[0.00% 0.006349ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #103
+                +---[0.00% 0.001368ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #104
+                +---[0.00% 8.39E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:docIds() #105
+                +---[0.00% 0.040511ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #101
+                +---[0.00% 0.001213ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #110
+                +---[0.00% 0.001392ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesDenseRoute() #112
+                +---[0.00% 0.001297ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesSparseRoute() #119
+                +---[0.07% 15.309213ms ] com.cffex.rag.retrievalengine.application.port.ParallelExecutionStrategy:invokeAll() #126
+                +---[0.00% 0.006854ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #135
+                +---[0.00% 0.002466ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #135
+                +---[0.00% 0.001125ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #136
+                +---[0.00% 0.001893ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #136
+                +---[0.00% 0.132983ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #137
+                +---[0.00% 0.007179ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #138
+                +---[0.00% 0.016944ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #140
+                +---[0.00% 0.018583ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:mergeCandidatesForRerank() #149
+                +---[0.00% 0.204072ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #154
+                +---[0.00% 0.003617ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService$RouteCandidates:<init>() #158
+                +---[99.93% 22021.549287ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:recall() #158
+                +---[0.00% 0.001122ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #170
+                +---[0.00% 0.001477ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #171
+                +---[0.00% 0.00199ms ] org.slf4j.Logger:debug() #169
+                +---[0.00% 0.001576ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #180
+                +---[0.00% 0.002101ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logFinalCandidates() #180
+                +---[0.00% 0.077914ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #181
+                +---[0.00% 0.014775ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #185
+                +---[0.00% 9.04E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #186
+                +---[0.00% 8.49E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #186
+                +---[0.00% 0.002132ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace$KbTrace:<init>() #193
+                +---[0.00% 0.004854ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace:addKbTrace() #184
+                +---[0.00% 0.00107ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #197
+                +---[0.00% 0.009186ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #199
+                +---[0.00% 9.06E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #200
+                +---[0.00% 0.001438ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #200
+                `---[0.00% 0.003733ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #198
+
+`---ts=2026-06-24 18:38:40.416;thread_name=;id=7172;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[22294.898945ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+        `---[100.00% 22294.753988ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute() #85
+            `---[100.00% 22294.744081ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+                +---[0.00% 0.001439ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:recallPolicy() #98
+                +---[0.00% 0.001042ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #100
+                +---[0.00% 9.02E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #102
+                +---[0.00% 7.57E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #103
+                +---[0.00% 0.031995ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #103
+                +---[0.00% 9.8E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #104
+                +---[0.00% 8.69E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:docIds() #105
+                +---[0.00% 0.032067ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #101
+                +---[0.00% 8.0E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #110
+                +---[0.00% 7.77E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesDenseRoute() #112
+                +---[0.00% 9.81E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesSparseRoute() #119
+                +---[0.08% 17.99289ms ] com.cffex.rag.retrievalengine.application.port.ParallelExecutionStrategy:invokeAll() #126
+                +---[0.00% 0.001918ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #135
+                +---[0.00% 0.002248ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #135
+                +---[0.00% 0.001099ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #136
+                +---[0.00% 0.001224ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #136
+                +---[0.00% 0.523463ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #137
+                +---[0.00% 0.006879ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #138
+                +---[0.00% 0.001755ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #140
+                +---[0.00% 0.018761ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:mergeCandidatesForRerank() #149
+                +---[0.00% 0.521238ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #154
+                +---[0.00% 0.004149ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService$RouteCandidates:<init>() #158
+                +---[99.91% 22275.155552ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:recall() #158
+                +---[0.00% 0.001745ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #170
+                +---[0.00% 0.001565ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #171
+                +---[0.00% 0.001989ms ] org.slf4j.Logger:debug() #169
+                +---[0.00% 0.005921ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #180
+                +---[0.00% 0.014436ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logFinalCandidates() #180
+                +---[0.00% 0.249759ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #181
+                +---[0.00% 0.00598ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #185
+                +---[0.00% 9.25E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #186
+                +---[0.00% 9.1E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #186
+                +---[0.00% 0.002717ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace$KbTrace:<init>() #193
+                +---[0.00% 0.003753ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace:addKbTrace() #184
+                +---[0.00% 0.001074ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #197
+                +---[0.00% 0.00102ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #199
+                +---[0.00% 8.78E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #200
+                +---[0.00% 7.7E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #200
+                `---[0.00% 0.003825ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #198
+
+`---ts=2026-06-24 18:38:40.199;thread_name=;id=7105;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[22837.573864ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+        `---[100.00% 22837.520267ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute() #85
+            `---[100.00% 22837.495563ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+                +---[0.00% 0.001687ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:recallPolicy() #98
+                +---[0.00% 0.001074ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #100
+                +---[0.00% 0.001011ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #102
+                +---[0.00% 8.72E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #103
+                +---[0.00% 9.38E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #103
+                +---[0.00% 0.013288ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #104
+                +---[0.00% 8.45E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:docIds() #105
+                +---[0.00% 0.005183ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #101
+                +---[0.00% 7.75E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #110
+                +---[0.00% 9.54E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesDenseRoute() #112
+                +---[0.00% 8.56E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesSparseRoute() #119
+                +---[0.38% 86.269216ms ] com.cffex.rag.retrievalengine.application.port.ParallelExecutionStrategy:invokeAll() #126
+                +---[0.00% 0.001541ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #135
+                +---[0.00% 0.002369ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #135
+                +---[0.00% 9.96E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #136
+                +---[0.00% 0.001067ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #136
+                +---[0.00% 0.437948ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #137
+                +---[0.00% 0.005431ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #138
+                +---[0.00% 0.001185ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #140
+                +---[0.00% 0.030394ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:mergeCandidatesForRerank() #149
+                +---[0.00% 0.337797ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #154
+                +---[0.00% 0.002608ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService$RouteCandidates:<init>() #158
+                +---[99.62% 22749.868447ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:recall() #158
+                +---[0.00% 0.001151ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #170
+                +---[0.00% 0.00171ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #171
+                +---[0.00% 0.002153ms ] org.slf4j.Logger:debug() #169
+                +---[0.00% 0.001143ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #180
+                +---[0.00% 0.002036ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logFinalCandidates() #180
+                +---[0.00% 0.352836ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #181
+                +---[0.00% 0.001636ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #185
+                +---[0.00% 0.001029ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #186
+                +---[0.00% 0.001024ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #186
+                +---[0.00% 0.008028ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace$KbTrace:<init>() #193
+                +---[0.00% 0.004689ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace:addKbTrace() #184
+                +---[0.00% 0.001098ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #197
+                +---[0.00% 0.004771ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #199
+                +---[0.00% 9.47E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #200
+                +---[0.00% 8.93E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #200
+                `---[0.00% 0.008124ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #198
+
+`---ts=2026-06-24 18:38:40.416;thread_name=;id=7159;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[22927.548742ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+        `---[100.00% 22927.47805ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute() #85
+            `---[100.00% 22927.462107ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+                +---[0.00% 0.011986ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:recallPolicy() #98
+                +---[0.00% 0.001695ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #100
+                +---[0.00% 0.008433ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #102
+                +---[0.00% 0.00959ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #103
+                +---[0.00% 0.001052ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #103
+                +---[0.00% 0.001532ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #104
+                +---[0.00% 9.73E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:docIds() #105
+                +---[0.00% 0.010574ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #101
+                +---[0.00% 8.48E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #110
+                +---[0.00% 0.001029ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesDenseRoute() #112
+                +---[0.00% 0.001152ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesSparseRoute() #119
+                +---[0.18% 41.873761ms ] com.cffex.rag.retrievalengine.application.port.ParallelExecutionStrategy:invokeAll() #126
+                +---[0.00% 0.00167ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #135
+                +---[0.00% 0.003142ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #135
+                +---[0.00% 8.52E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #136
+                +---[0.00% 0.001061ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #136
+                +---[0.00% 0.424553ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #137
+                +---[0.00% 0.004386ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #138
+                +---[0.00% 0.001394ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #140
+                +---[0.00% 0.019434ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:mergeCandidatesForRerank() #149
+                +---[0.00% 0.333635ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #154
+                +---[0.00% 0.00332ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService$RouteCandidates:<init>() #158
+                +---[99.81% 22884.111811ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:recall() #158
+                +---[0.00% 0.001519ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #170
+                +---[0.00% 0.001807ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #171
+                +---[0.00% 0.002692ms ] org.slf4j.Logger:debug() #169
+                +---[0.00% 0.001039ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #180
+                +---[0.00% 0.002561ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logFinalCandidates() #180
+                +---[0.00% 0.365916ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #181
+                +---[0.00% 0.00153ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #185
+                +---[0.00% 9.97E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #186
+                +---[0.00% 8.56E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #186
+                +---[0.00% 0.008674ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace$KbTrace:<init>() #193
+                +---[0.00% 0.004245ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace:addKbTrace() #184
+                +---[0.00% 0.001015ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #197
+                +---[0.00% 0.005532ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #199
+                +---[0.00% 8.88E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #200
+                +---[0.00% 8.14E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #200
+                `---[0.00% 0.019323ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #198
+
+`---ts=2026-06-24 18:38:40.416;thread_name=;id=7162;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[23198.592494ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+        `---[100.00% 23198.523825ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute() #85
+            `---[100.00% 23198.511525ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+                +---[0.00% 0.002053ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:recallPolicy() #98
+                +---[0.00% 0.001406ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #100
+                +---[0.00% 0.001135ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #102
+                +---[0.00% 0.00113ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #103
+                +---[0.00% 0.001042ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #103
+                +---[0.00% 0.001348ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #104
+                +---[0.00% 0.018585ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:docIds() #105
+                +---[0.00% 0.007319ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #101
+                +---[0.00% 7.62E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #110
+                +---[0.00% 9.28E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesDenseRoute() #112
+                +---[0.00% 9.44E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesSparseRoute() #119
+                +---[0.09% 19.897681ms ] com.cffex.rag.retrievalengine.application.port.ParallelExecutionStrategy:invokeAll() #126
+                +---[0.00% 0.001021ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #135
+                +---[0.00% 0.002174ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #135
+                +---[0.00% 6.96E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #136
+                +---[0.00% 7.49E-4ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #136
+                +---[0.00% 0.278843ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #137
+                +---[0.00% 0.009557ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #138
+                +---[0.00% 0.001224ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #140
+                +---[0.00% 0.020258ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:mergeCandidatesForRerank() #149
+                +---[0.00% 0.285298ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #154
+                +---[0.00% 0.002442ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService$RouteCandidates:<init>() #158
+                +---[99.91% 23177.399769ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:recall() #158
+                +---[0.00% 0.001548ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #170
+                +---[0.00% 0.001753ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #171
+                +---[0.00% 0.002139ms ] org.slf4j.Logger:debug() #169
+                +---[0.00% 0.004867ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #180
+                +---[0.00% 0.013153ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logFinalCandidates() #180
+                +---[0.00% 0.354463ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #181
+                +---[0.00% 0.00116ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #185
+                +---[0.00% 0.001278ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #186
+                +---[0.00% 0.006259ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #186
+                +---[0.00% 0.002254ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace$KbTrace:<init>() #193
+                +---[0.00% 0.004032ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace:addKbTrace() #184
+                +---[0.00% 0.007797ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #197
+                +---[0.00% 8.77E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #199
+                +---[0.00% 9.52E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #200
+                +---[0.00% 7.61E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #200
+                `---[0.00% 0.00442ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #198
+
+`---ts=2026-06-24 18:38:40.416;thread_name=;id=7171;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[23490.514416ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+        `---[100.00% 23490.338812ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute() #85
+            `---[100.00% 23490.326846ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+                +---[0.00% 0.002093ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:recallPolicy() #98
+                +---[0.00% 0.001312ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #100
+                +---[0.00% 0.001501ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #102
+                +---[0.00% 9.42E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #103
+                +---[0.00% 9.5E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #103
+                +---[0.00% 0.001295ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #104
+                +---[0.00% 0.001385ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:docIds() #105
+                +---[0.00% 0.007063ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #101
+                +---[0.00% 9.13E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #110
+                +---[0.00% 9.38E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesDenseRoute() #112
+                +---[0.00% 8.89E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesSparseRoute() #119
+                +---[0.08% 17.915375ms ] com.cffex.rag.retrievalengine.application.port.ParallelExecutionStrategy:invokeAll() #126
+                +---[0.00% 0.001247ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #135
+                +---[0.00% 0.001627ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #135
+                +---[0.00% 6.61E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #136
+                +---[0.00% 0.010477ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #136
+                +---[0.00% 0.385903ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #137
+                +---[0.00% 0.004685ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #138
+                +---[0.00% 0.001134ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #140
+                +---[0.00% 0.018537ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:mergeCandidatesForRerank() #149
+                +---[0.00% 0.397797ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #154
+                +---[0.00% 0.002428ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService$RouteCandidates:<init>() #158
+                +---[99.92% 23471.098012ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:recall() #158
+                +---[0.00% 0.001239ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #170
+                +---[0.00% 0.002106ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #171
+                +---[0.00% 0.001913ms ] org.slf4j.Logger:debug() #169
+                +---[0.00% 0.001116ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #180
+                +---[0.00% 0.021093ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logFinalCandidates() #180
+                +---[0.00% 0.271458ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #181
+                +---[0.00% 0.001105ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #185
+                +---[0.00% 9.53E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #186
+                +---[0.00% 8.96E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #186
+                +---[0.00% 0.002266ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace$KbTrace:<init>() #193
+                +---[0.00% 0.004632ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace:addKbTrace() #184
+                +---[0.00% 0.00126ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #197
+                +---[0.00% 9.63E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #199
+                +---[0.00% 0.001369ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #200
+                +---[0.00% 8.36E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #200
+                `---[0.00% 0.003046ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #198
+
+`---ts=2026-06-24 18:38:40.199;thread_name=;id=7111;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[24012.971812ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+        `---[100.00% 24012.873648ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute() #85
+            `---[100.00% 24012.855442ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+                +---[0.00% 0.002262ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:recallPolicy() #98
+                +---[0.00% 0.001413ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #100
+                +---[0.00% 0.001124ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #102
+                +---[0.00% 0.001443ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #103
+                +---[0.00% 9.94E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #103
+                +---[0.00% 0.001384ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #104
+                +---[0.00% 0.024184ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:docIds() #105
+                +---[0.00% 0.007419ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #101
+                +---[0.00% 7.78E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #110
+                +---[0.00% 0.002038ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesDenseRoute() #112
+                +---[0.00% 9.29E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesSparseRoute() #119
+                +---[0.29% 69.01462ms ] com.cffex.rag.retrievalengine.application.port.ParallelExecutionStrategy:invokeAll() #126
+                +---[0.00% 0.002214ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #135
+                +---[0.00% 0.01122ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #135
+                +---[0.00% 0.001312ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #136
+                +---[0.00% 0.00145ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #136
+                +---[0.00% 0.440881ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #137
+                +---[0.00% 0.009922ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #138
+                +---[0.00% 0.002002ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #140
+                +---[0.00% 0.022709ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:mergeCandidatesForRerank() #149
+                +---[0.00% 0.423508ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #154
+                +---[0.00% 0.019749ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService$RouteCandidates:<init>() #158
+                +---[99.70% 23940.699984ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:recall() #158
+                +---[0.00% 0.001122ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #170
+                +---[0.00% 0.0015ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #171
+                +---[0.00% 0.006695ms ] org.slf4j.Logger:debug() #169
+                +---[0.00% 9.95E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #180
+                +---[0.00% 0.002279ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logFinalCandidates() #180
+                +---[0.00% 0.264448ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #181
+                +---[0.00% 0.00131ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #185
+                +---[0.00% 0.012424ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #186
+                +---[0.00% 0.001014ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #186
+                +---[0.00% 0.002372ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace$KbTrace:<init>() #193
+                +---[0.00% 0.003881ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace:addKbTrace() #184
+                +---[0.00% 0.001318ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #197
+                +---[0.00% 9.46E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #199
+                +---[0.00% 8.9E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #200
+                +---[0.00% 8.6E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #200
+                `---[0.00% 0.003151ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #198
+
+`---ts=2026-06-24 18:38:40.416;thread_name=;id=7160;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[24138.926856ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+        `---[100.00% 24138.862551ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute() #85
+            `---[100.00% 24138.851889ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+                +---[0.00% 0.005438ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:recallPolicy() #98
+                +---[0.00% 0.001513ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #100
+                +---[0.00% 0.006325ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #102
+                +---[0.00% 0.00137ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #103
+                +---[0.00% 0.001898ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #103
+                +---[0.00% 0.001717ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #104
+                +---[0.00% 0.001445ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:docIds() #105
+                +---[0.00% 0.01382ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #101
+                +---[0.00% 7.74E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #110
+                +---[0.00% 0.001148ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesDenseRoute() #112
+                +---[0.00% 0.001836ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesSparseRoute() #119
+                +---[0.08% 19.38549ms ] com.cffex.rag.retrievalengine.application.port.ParallelExecutionStrategy:invokeAll() #126
+                +---[0.00% 0.001158ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #135
+                +---[0.00% 0.001967ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #135
+                +---[0.00% 7.2E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #136
+                +---[0.00% 0.006153ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #136
+                +---[0.00% 0.383587ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #137
+                +---[0.00% 0.004802ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #138
+                +---[0.00% 0.011715ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #140
+                +---[0.00% 0.038096ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:mergeCandidatesForRerank() #149
+                +---[0.00% 0.372474ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #154
+                +---[0.00% 0.003514ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService$RouteCandidates:<init>() #158
+                +---[99.91% 24118.058989ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:recall() #158
+                +---[0.00% 0.001243ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #170
+                +---[0.00% 0.001641ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #171
+                +---[0.00% 0.005806ms ] org.slf4j.Logger:debug() #169
+                +---[0.00% 0.001226ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #180
+                +---[0.00% 0.001979ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logFinalCandidates() #180
+                +---[0.00% 0.339749ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #181
+                +---[0.00% 0.001336ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #185
+                +---[0.00% 0.001032ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #186
+                +---[0.00% 8.88E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #186
+                +---[0.00% 0.003121ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace$KbTrace:<init>() #193
+                +---[0.00% 0.004051ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace:addKbTrace() #184
+                +---[0.00% 0.001133ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #197
+                +---[0.00% 0.005432ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #199
+                +---[0.00% 9.14E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #200
+                +---[0.00% 8.44E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #200
+                `---[0.00% 0.006411ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #198
+
+`---ts=2026-06-24 18:38:40.416;thread_name=;id=7170;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[24369.979111ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+        `---[100.00% 24369.774641ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute() #85
+            `---[100.00% 24369.733713ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:execute()
+                +---[0.00% 0.002587ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:recallPolicy() #98
+                +---[0.00% 0.001517ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #100
+                +---[0.00% 0.001528ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #102
+                +---[0.00% 0.001591ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #103
+                +---[0.00% 0.001162ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #103
+                +---[0.00% 0.002043ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #104
+                +---[0.00% 0.035551ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:docIds() #105
+                +---[0.00% 0.009869ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #101
+                +---[0.00% 0.001231ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:routeCandidateK() #110
+                +---[0.00% 0.001245ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesDenseRoute() #112
+                +---[0.00% 0.001185ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:usesSparseRoute() #119
+                +---[0.06% 15.374965ms ] com.cffex.rag.retrievalengine.application.port.ParallelExecutionStrategy:invokeAll() #126
+                +---[0.00% 0.001248ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #135
+                +---[0.00% 0.001711ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #135
+                +---[0.00% 9.47E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #136
+                +---[0.00% 9.33E-4ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logRouteCandidates() #136
+                +---[0.00% 0.27314ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #137
+                +---[0.00% 0.010181ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #138
+                +---[0.00% 0.011774ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #140
+                +---[0.00% 0.019084ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:mergeCandidatesForRerank() #149
+                +---[0.00% 0.186965ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #154
+                +---[0.00% 0.00427ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService$RouteCandidates:<init>() #158
+                +---[99.93% 24353.364197ms ] com.cffex.rag.retrievalengine.domain.service.KnowledgeBaseRecallDomainService:recall() #158
+                +---[0.00% 0.001399ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #170
+                +---[0.00% 0.001423ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #171
+                +---[0.00% 0.002589ms ] org.slf4j.Logger:debug() #169
+                +---[0.00% 0.001019ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #180
+                +---[0.00% 0.001844ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:logFinalCandidates() #180
+                +---[0.00% 0.17692ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordKbCandidates() #181
+                +---[0.00% 0.005254ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #185
+                +---[0.00% 0.001016ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #186
+                +---[0.00% 0.001001ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #186
+                +---[0.00% 0.002244ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace$KbTrace:<init>() #193
+                +---[0.00% 0.004002ms ] com.cffex.rag.retrievalengine.application.execution.RetrievalTrace:addKbTrace() #184
+                +---[0.00% 0.001158ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:enabled() #197
+                +---[0.00% 9.12E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:knowledgeBaseId() #199
+                +---[0.00% 9.2E-4ms ] com.cffex.rag.retrievalengine.application.command.KnowledgeBaseRecallCommand:retrievalMode() #200
+                +---[0.00% 7.93E-4ms ] com.cffex.rag.common.domain.metadata.RetrievalMode:name() #200
+                `---[0.00% 0.007667ms ] com.cffex.rag.retrievalengine.application.debug.RetrievalDebugTraceWriter:record() #198
+
+
+
+[arthas@7]$ trace com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask searchDense '#cost > 1000'
+Press Q or Ctrl+C to abort.
+Affect(class count: 1 , method count: 1) cost in 187 ms, listenerId: 24
+[arthas@7]$ trace com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask searchSparse '#cost > 1000'
+Press Q or Ctrl+C to abort.
+Affect(class count: 1 , method count: 1) cost in 172 ms, listenerId: 25
+[arthas@7]$ 
+
+
+[arthas@7]$ trace com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask rerankIfNecessary '#cost > 1000'
+`---ts=2026-06-24 18:44:06.054;thread_name=;id=7838;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[1325.179441ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001517ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.01% 0.149599ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.001922ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002391ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 7.95E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 8.12E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.97% 1324.774957ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.004971ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.01% 0.151745ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:05.840;thread_name=;id=7787;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[1688.772977ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001522ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.02% 0.404806ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002257ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002634ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 0.001273ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 7.78E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.94% 1687.839197ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002003ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.02% 0.340825ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.053;thread_name=;id=7836;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[1623.151808ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001863ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.01% 0.224503ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.001727ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002673ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 8.01E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 7.8E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.96% 1622.530526ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.006452ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.02% 0.303112ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:05.840;thread_name=;id=7780;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[2034.278799ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.020792ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.02% 0.469951ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.003189ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.038259ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 0.001393ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 0.00108ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.96% 2033.389999ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.001389ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.01% 0.241536ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.053;thread_name=;id=7828;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[1972.262542ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001406ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.02% 0.301065ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002156ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.006743ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 8.43E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 8.01E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.96% 1971.480102ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.001542ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.02% 0.406887ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:05.838;thread_name=;id=7778;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[2318.837943ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001547ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.02% 0.523706ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002248ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.003281ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 9.06E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 7.37E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.95% 2317.704896ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002428ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.02% 0.418856ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.054;thread_name=;id=7831;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[2241.530445ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001955ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.01% 0.12815ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002736ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.003936ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 0.001323ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 9.24E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.98% 2241.180034ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.001515ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.01% 0.134317ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:05.839;thread_name=;id=7782;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[2610.635272ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001801ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.01% 0.303366ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002123ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.0028ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 9.15E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 8.54E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.97% 2609.930026ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.001463ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.01% 0.263757ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.057;thread_name=;id=7832;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[2535.441059ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001303ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.01% 0.357196ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002163ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002637ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 0.007511ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 7.73E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.97% 2534.640386ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.001656ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.01% 0.352246ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:05.841;thread_name=;id=7790;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[2925.281362ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001329ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.01% 0.290226ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.012533ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002606ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 8.42E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 0.001143ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.97% 2924.47404ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002201ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.01% 0.392518ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.055;thread_name=;id=7830;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[2865.418682ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.00133ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.01% 0.370709ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002946ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002376ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 8.05E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 0.007304ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.97% 2864.597466ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.009058ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.01% 0.336134ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:05.842;thread_name=;id=7776;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[3220.702703ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001415ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.01% 0.292565ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002025ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.006849ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 8.46E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 7.41E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.98% 3219.998972ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.001422ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.01% 0.320568ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.055;thread_name=;id=7843;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[3177.592645ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.019327ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.01% 0.248502ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.009679ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002457ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 8.56E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 7.39E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.98% 3176.903687ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002114ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.01% 0.28981ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:05.842;thread_name=;id=7789;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[3478.886123ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001501ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.01% 0.233656ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002089ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.011331ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 8.08E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 8.42E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.98% 3478.166926ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.001874ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.01% 0.390189ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.056;thread_name=;id=7841;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[10609.710141ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001818ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.398309ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002238ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.00259ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 0.006891ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 8.31E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 10608.82433ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002675ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.385006ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:05.841;thread_name=;id=7774;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[10829.934187ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001536ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.435214ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002399ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002598ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 8.69E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 7.55E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 10828.974427ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.001822ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.31629ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:05.838;thread_name=;id=7781;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[11292.046192ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.002359ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.356906ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.003673ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.004511ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 9.11E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 9.38E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 11291.153289ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002708ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.317182ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.054;thread_name=;id=7844;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[11092.967952ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001417ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.346997ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.001724ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002533ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 9.66E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 7.63E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 11092.140308ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.005446ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.376896ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:05.840;thread_name=;id=7784;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[11614.174016ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.002239ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.301065ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002608ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.022054ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 0.001164ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 0.001216ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 11613.469141ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002884ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.194704ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.054;thread_name=;id=7833;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[11410.971427ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001359ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.327573ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.00257ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.003043ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 9.8E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 0.001072ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 11410.264304ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.001225ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.302986ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:05.841;thread_name=;id=7779;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[11977.962488ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001365ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.314661ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.001916ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002905ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 8.27E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 8.31E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 11977.247106ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002085ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.274145ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.057;thread_name=;id=7840;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[11804.786458ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001359ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.225987ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.001824ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002605ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 0.001117ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 8.2E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 11804.070385ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002428ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.391012ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:05.841;thread_name=;id=7786;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[12365.303518ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001628ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.48792ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002201ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002576ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 8.53E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 8.62E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 12364.349487ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.003628ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.340378ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.058;thread_name=;id=7829;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[12163.01843ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001495ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.347542ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.00678ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002621ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 7.63E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 9.93E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 12162.136879ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.001478ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.455796ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.285;thread_name=;id=7888;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[12324.724852ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001524ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.24842ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002422ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002529ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 7.99E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 8.72E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 12323.957105ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.00287ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.344577ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:05.861;thread_name=;id=7773;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[12766.528066ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001579ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.331642ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.001925ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.003006ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 8.94E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 8.09E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 12765.726448ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002243ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.380061ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:05.840;thread_name=;id=7785;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[13116.288744ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001496ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.42485ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.006876ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002638ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 7.95E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 0.001271ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 13115.32824ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.00232ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.378746ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.286;thread_name=;id=7897;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[12714.031937ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001531ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.302852ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002383ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.00276ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 0.001026ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 8.33E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 12713.272768ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.009987ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.322792ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:05.843;thread_name=;id=7775;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[13445.378314ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001419ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.356807ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.001973ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002738ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 8.73E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 7.63E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 13444.456161ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002889ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.471262ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.088;thread_name=;id=7827;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[13298.595586ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001989ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.308615ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.01034ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.003989ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 0.001012ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 0.004471ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 13297.787639ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002806ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.391678ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.284;thread_name=;id=7890;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[13457.005065ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001415ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.239029ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.001789ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002231ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 8.73E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 7.58E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 13456.271709ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002291ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.410943ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.288;thread_name=;id=7893;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[13467.462357ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.011926ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.530622ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.00424ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.004785ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 0.001577ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 0.00238ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 13466.23562ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.003098ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.559903ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.057;thread_name=;id=7839;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[14047.737439ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.002305ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.489902ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.00274ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.003891ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 0.001526ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 0.001801ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 14046.71229ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002849ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.407028ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.288;thread_name=;id=7895;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[13821.206659ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001526ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.378331ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002615ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002788ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 9.87E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 0.001179ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[99.99% 13820.283958ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.009847ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.391949ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.285;thread_name=;id=7887;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[21080.107238ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.002457ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.448254ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.003644ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.003757ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 0.027679ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 0.001762ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[100.00% 21079.081874ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.003862ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.380838ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.289;thread_name=;id=7886;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[21080.071736ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001368ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.305915ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.006604ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002743ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 7.62E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 8.96E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[100.00% 21079.260711ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002565ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.437758ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.283;thread_name=;id=7885;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[21423.028755ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001777ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.443386ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002323ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.003595ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 8.87E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 0.001076ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[100.00% 21422.33012ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002233ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.147697ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.312;thread_name=;id=7881;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[21501.303908ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.002776ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.338583ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002559ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.003223ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 8.89E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 0.001023ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[100.00% 21500.419466ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002302ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.454043ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.287;thread_name=;id=7898;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[21776.864491ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001324ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.332898ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.001763ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.013812ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 9.36E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 7.8E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[100.00% 21776.041179ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002818ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.394314ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.282;thread_name=;id=7892;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[21788.386951ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.002027ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.148927ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002749ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.003524ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 0.001015ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 0.001217ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[100.00% 21787.990371ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.001449ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.169162ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.284;thread_name=;id=7891;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[22150.620499ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.002222ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.438446ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002806ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.004537ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 0.002269ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 0.018523ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[100.00% 22149.717634ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.003128ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.276974ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.288;thread_name=;id=7889;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[22177.441167ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001375ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.290041ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.001775ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002402ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 0.001493ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 0.00122ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[100.00% 22176.793685ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.001275ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.245561ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.283;thread_name=;id=7884;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[22551.431292ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.00199ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.279813ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002732ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.004439ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 9.07E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 0.001183ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[100.00% 22550.646241ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.003453ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.371552ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.285;thread_name=;id=7882;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[22558.303503ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.002256ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.42083ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002091ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002674ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 0.013964ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 8.15E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[100.00% 22557.401738ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002047ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.351616ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.288;thread_name=;id=7896;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[22926.506445ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001285ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.286195ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.001976ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.00251ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 8.31E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 7.9E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[100.00% 22925.838507ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.001959ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.303784ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.289;thread_name=;id=7883;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[23252.088837ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001471ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.312395ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.002079ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002268ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 8.42E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 7.51E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[100.00% 23251.237221ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.009208ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.447344ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393
+
+`---ts=2026-06-24 18:44:06.288;thread_name=;id=7894;is_daemon=true;priority=5;TCCL=org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@32507479
+    `---[23588.089801ms] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:rerankIfNecessary()
+        +---[0.00% 0.001941ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:hasRerankPolicy() #371
+        +---[0.00% 0.31927ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankRequest() #375
+        +---[0.00% 0.001872ms ] com.cffex.rag.common.service.RagProcessEventPublisher:start() #376
+        +---[0.00% 0.002349ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:toRerankCommand() #384
+        +---[0.00% 7.44E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:resolvedTopK() #385
+        +---[0.00% 7.51E-4ms ] com.cffex.rag.retrievalengine.domain.model.KnowledgeBaseRecallPolicy:scoreThresholdEnabled() #386
+        +---[100.00% 23587.366198ms ] com.cffex.rag.retrievalengine.application.RerankRankingService:rerankCandidates() #381
+        +---[0.00% 0.002183ms ] com.cffex.rag.common.service.RagProcessEventPublisher:complete() #388
+        `---[0.00% 0.335074ms ] com.cffex.rag.retrievalengine.application.retrieval.KnowledgeBaseRetrievalTask:recordRerankResponse() #393

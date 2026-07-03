@@ -7,11 +7,14 @@ import java.util.Objects;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import com.cffex.rag.retrievalengine.config.RetrievalHttpClientProperties;
 import com.cffex.rag.retrievalengine.domain.model.EmbeddingModelPolicy;
 import com.cffex.rag.retrievalengine.domain.port.QueryEmbeddingPort;
+import com.cffex.rag.retrievalengine.infrastructure.http.PoolingRestClientFactory;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -25,10 +28,21 @@ public class OpenAiCompatibleQueryEmbeddingAdapter implements QueryEmbeddingPort
 
     private static final String DIFY_QUERY_INPUT_TYPE = "query";
 
-    private final RestClient.Builder restClientBuilder;
+    private final RestClient restClient;
 
-    public OpenAiCompatibleQueryEmbeddingAdapter(RestClient.Builder restClientBuilder) {
-        this.restClientBuilder = Objects.requireNonNull(restClientBuilder);
+    @Autowired
+    public OpenAiCompatibleQueryEmbeddingAdapter(
+            RestClient.Builder restClientBuilder,
+            RetrievalHttpClientProperties httpClientProperties
+    ) {
+        this.restClient = PoolingRestClientFactory.create(
+                Objects.requireNonNull(restClientBuilder),
+                Objects.requireNonNull(httpClientProperties)
+        );
+    }
+
+    OpenAiCompatibleQueryEmbeddingAdapter(RestClient restClient) {
+        this.restClient = Objects.requireNonNull(restClient);
     }
 
     @Override
@@ -37,8 +51,7 @@ public class OpenAiCompatibleQueryEmbeddingAdapter implements QueryEmbeddingPort
         Objects.requireNonNull(embeddingModel, "embeddingModel must not be null");
         log.debug("embedding | model={}, endpoint={}", embeddingModel.model(), embeddingModel.endpoint());
 
-        EmbeddingResponse response = restClientBuilder
-                .build()
+        EmbeddingResponse response = restClient
                 .post()
                 .uri(resolveEmbeddingsRequestUrl(embeddingModel.endpoint()))
                 .header("Authorization", "Bearer " + embeddingModel.authToken())

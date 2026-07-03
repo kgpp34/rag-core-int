@@ -15,7 +15,12 @@ import io.milvus.v2.client.MilvusClientV2;
 
 /** retrieval-engine 基础装配：负责 Milvus SDK 客户端实例化。 */
 @Configuration
-@EnableConfigurationProperties({MilvusProperties.class, ChatProperties.class, RetrievalDebugTraceProperties.class})
+@EnableConfigurationProperties({
+        MilvusProperties.class,
+        ChatProperties.class,
+        RetrievalDebugTraceProperties.class,
+        RetrievalHttpClientProperties.class
+})
 public class RetrievalEngineConfiguration {
 
     @Bean

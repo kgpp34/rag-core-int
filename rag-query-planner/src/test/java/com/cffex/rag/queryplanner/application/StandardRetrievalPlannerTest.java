@@ -45,7 +45,7 @@ class StandardRetrievalPlannerTest {
             List<String> docIds = invocation.getArgument(0);
             Map<String, DocumentMeta> metas = new java.util.LinkedHashMap<>();
             for (String docId : docIds) {
-                metas.put(docId, new DocumentMeta(docId, inferKnowledgeBaseId(docId), docId + ".txt", null));
+                metas.put(docId, new DocumentMeta(docId, inferKnowledgeBaseId(docId), docId + ".txt", null, null));
             }
             return metas;
         });
@@ -515,9 +515,9 @@ class StandardRetrievalPlannerTest {
             return List.of();
         });
         doReturn(Map.of(
-                "doc-1", new DocumentMeta("doc-1", "kb-1", "doc-1.txt", null),
-                "doc-2", new DocumentMeta("doc-2", "kb-2", "doc-2.txt", null),
-                "doc-3", new DocumentMeta("doc-3", "kb-1", "doc-3.txt", null)
+                "doc-1", new DocumentMeta("doc-1", "kb-1", "doc-1.txt", null, null),
+                "doc-2", new DocumentMeta("doc-2", "kb-2", "doc-2.txt", null, null),
+                "doc-3", new DocumentMeta("doc-3", "kb-1", "doc-3.txt", null, null)
         )).when(metadataQueryService).getDocumentMetas(any());
 
         ExecutionPlan plan = planner.plan(new QueryPlanRequest("hello", List.of("doc-1", "doc-2", "doc-3")));

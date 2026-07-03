@@ -21,7 +21,7 @@ class OpenAiCompatibleQueryEmbeddingAdapterTest {
     void embed_sendsDifyQueryInputTypeAndNormalizesVector() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        OpenAiCompatibleQueryEmbeddingAdapter adapter = new OpenAiCompatibleQueryEmbeddingAdapter(builder);
+        OpenAiCompatibleQueryEmbeddingAdapter adapter = new OpenAiCompatibleQueryEmbeddingAdapter(builder.build());
 
         server.expect(requestTo("https://embedding.example.com/v1/embeddings"))
                 .andExpect(method(HttpMethod.POST))

@@ -33,6 +33,7 @@ import com.cffex.rag.common.domain.llm.LlmResponse;
 import com.cffex.rag.common.domain.llm.LlmStreamChunk;
 import com.cffex.rag.common.domain.memory.ConversationMemoryContext;
 import com.cffex.rag.common.domain.memory.ConversationMemoryRequest;
+import com.cffex.rag.common.domain.metadata.DocumentMeta;
 import com.cffex.rag.common.domain.metadata.KnowledgeBaseQueryCondition;
 import com.cffex.rag.common.domain.metadata.KnowledgeBaseMeta;
 import com.cffex.rag.common.domain.metadata.ModelMeta;
@@ -76,8 +77,9 @@ public class RagApiService {
             "retrieval.summary",
             "answer_generation.summary"
     );
-    private static final Pattern REFERENCE_HEADING_PATTERN = Pattern.compile("(?m)^##\\s*参考资料\\s*$");
-    private static final Pattern REFERENCE_CITATION_PATTERN = Pattern.compile("\\[(\\d+)](?:\\([^)]*\\))?");
+    private static final Pattern REFERENCE_HEADING_PATTERN = Pattern.compile("(?m)^\\s{0,3}#{1,6}\\s*参考资料\\s*[:：]?\\s*$");
+    private static final String UNRELATED_ANSWER_MESSAGE = "当前检索结果与问题明显不相关，无法基于参考资料回答";
+    private static final int REFERENCE_SECTION_DETECTION_GUARD_CHARS = 24;
 
     private final MetadataQueryService metadataQueryService;
     private final QueryPlannerFacade queryPlannerFacade;
@@ -244,6 +246,7 @@ public class RagApiService {
         AtomicReference<Map<String, Object>> metadataHolder = new AtomicReference<>(Map.of());
         AtomicBoolean firstTokenEmitted = new AtomicBoolean();
         AtomicReference<Long> firstTokenMsHolder = new AtomicReference<>();
+        ReferenceSectionSuppressor referenceSectionSuppressor = new ReferenceSectionSuppressor();
         long generationStart = System.nanoTime();
         StageHandle generationHandle = eventPublisher.start(RagProcessStage.ANSWER_GENERATION, Map.of());
         recordTrace("answer_generation", "answer_generation.started", Map.of(
@@ -265,6 +268,7 @@ public class RagApiService {
                         generationHandle,
                         firstTokenEmitted,
                         firstTokenMsHolder,
+                        referenceSectionSuppressor,
                         generationStart
                 );
             });
@@ -304,6 +308,7 @@ public class RagApiService {
             log.info("流式问答结束，但未收到显式结束块，请求ID={}，结果块数={}",
                     preparedAnswer.retrieval().requestId(),
                     preparedAnswer.retrieval().chunks().size());
+            flushStreamAnswerTail(answerBuilder, referenceSectionSuppressor, preparedAnswer, eventConsumer);
             eventPublisher.complete(generationHandle, answerGenerationDetails(null, metadataHolder.get()));
             eventConsumer.accept(new StreamEvent("done", new ApiModels.RagAnswerStreamDone(
                     null,
@@ -467,40 +472,28 @@ public class RagApiService {
     private List<LlmMessage> buildAnswerMessages(
             ExecutionPlan executionPlan,
             ApiModels.RagAnswerRequest request,
-            List<RetrievedChunk> chunks
+            List<RetrievedChunk> chunks,
+            Map<String, DocumentMeta> documentMetas,
+            List<ReferenceSource> referenceSources
     ) {
         List<LlmMessage> messages = new ArrayList<>();
         messages.add(new LlmMessage(LlmMessageRole.SYSTEM, resolveSystemPrompt(executionPlan.systemPrompt())));
 
-        Map<String, String> docNames = resolveDocumentNames(chunks);
-        List<ReferenceSource> referenceSources = buildReferenceSources(chunks, docNames);
-
         StringBuilder prompt = new StringBuilder();
         prompt.append("请基于下面检索到的知识片段回答用户问题。");
         prompt.append('\n').append("如果知识片段不足以支持结论，请明确说明。");
-        prompt.append('\n').append("引用要求：正文和参考资料必须使用下面“可引用来源”的来源编号；同一个来源编号最多出现一次。");
+        prompt.append('\n').append("不要在正文中输出来源编号、参考资料章节、Markdown 链接或 URL；参考资料由系统自动追加。");
         prompt.append('\n').append('\n').append("用户问题：").append(request.query());
-        if (!referenceSources.isEmpty()) {
-            prompt.append('\n').append('\n').append("可引用来源：");
-            for (ReferenceSource source : referenceSources) {
-                prompt.append('\n')
-                        .append('[').append(source.index()).append("] ")
-                        .append(source.fileName());
-                if (source.path() != null) {
-                    prompt.append(" 链接：").append(source.path());
-                }
-            }
-        }
         prompt.append('\n').append('\n').append("知识片段：");
         for (int i = 0; i < chunks.size(); i++) {
             RetrievedChunk chunk = chunks.get(i);
-            String docName = docNames.get(chunk.documentId());
-            Map<String, Object> metadata = chunk.metadata();
-            ReferenceSource referenceSource = findReferenceSource(referenceSources, chunk, docName);
+            DocumentMeta documentMeta = documentMetas.get(chunk.documentId());
+            String docName = documentMeta == null ? null : documentMeta.name();
+            ReferenceSource referenceSource = findReferenceSource(referenceSources, chunk, documentMeta);
             prompt.append('\n')
                     .append("[片段 ").append(i + 1).append(']');
             if (referenceSource != null) {
-                prompt.append(" 来源编号：[").append(referenceSource.index()).append(']');
+                prompt.append(" 来源文件：").append(referenceSource.fileName());
             } else if (docName != null) {
                 prompt.append(" 来源：").append(docName);
             }
@@ -591,16 +584,18 @@ public class RagApiService {
                 eventPublisher,
                 memoryContext.conversationId()
         );
+        Map<String, DocumentMeta> documentMetas = resolveDocumentMetas(retrieval.chunks());
+        List<ReferenceSource> referenceSources = buildReferenceSources(retrieval.chunks(), documentMetas);
         ModelMeta llmModel = resolveLlmModel(null);
         LlmRequest llmRequest = new LlmRequest(
                 toEndpoint(llmModel),
-                buildAnswerMessages(executionPlan, request, retrieval.chunks()),
+                buildAnswerMessages(executionPlan, request, retrieval.chunks(), documentMetas, referenceSources),
                 appProperties.getRag().getAnswer().getDefaultTemperature(),
                 appProperties.getRag().getAnswer().getDefaultMaxTokens(),
                 memoryContext.userId(),
                 memoryContext.conversationId()
         );
-        return new PreparedAnswer(executionPlan, retrieval, llmModel, llmRequest);
+        return new PreparedAnswer(executionPlan, retrieval, llmModel, llmRequest, referenceSources);
     }
 
     private ExecutionPlan planAnswer(ApiModels.RagAnswerRequest request) {
@@ -1266,7 +1261,7 @@ public class RagApiService {
                 .toList();
     }
 
-    private Map<String, String> resolveDocumentNames(List<RetrievedChunk> chunks) {
+    private Map<String, DocumentMeta> resolveDocumentMetas(List<RetrievedChunk> chunks) {
         List<String> docIds = chunks.stream()
                 .map(RetrievedChunk::documentId)
                 .distinct()
@@ -1274,29 +1269,29 @@ public class RagApiService {
         if (docIds.isEmpty()) {
             return Map.of();
         }
-        return metadataQueryService.getDocumentMetas(docIds).entrySet().stream()
-                .filter(entry -> entry.getValue().name() != null)
-                .collect(java.util.stream.Collectors.toMap(
-                        Map.Entry::getKey,
-                        entry -> entry.getValue().name()
-                ));
+        return metadataQueryService.getDocumentMetas(docIds);
     }
 
     private List<ReferenceSource> buildReferenceSources(
             List<RetrievedChunk> chunks,
-            Map<String, String> docNames
+            Map<String, DocumentMeta> documentMetas
     ) {
         String difyFilesUrl = appProperties.getRag().getDifyFilesUrl();
         Map<String, ReferenceSource> sources = new LinkedHashMap<>();
         for (RetrievedChunk chunk : chunks) {
             Map<String, Object> metadata = chunk.metadata();
+            DocumentMeta documentMeta = documentMetas.get(chunk.documentId());
             String metadataFileName = metadataValue(metadata, "document_name");
-            String uploadFileId = metadataValue(metadata, "upload_file_id");
-            String fileName = firstNonBlank(metadataFileName, docNames.get(chunk.documentId()));
+            String uploadFileId = firstNonBlank(
+                    metadataValue(metadata, "upload_file_id"),
+                    documentMeta == null ? null : documentMeta.uploadFileId()
+            );
+            String uploadFileKey = documentMeta == null ? null : documentMeta.uploadFileKey();
+            String fileName = firstNonBlank(metadataFileName, documentMeta == null ? null : documentMeta.name());
             if (fileName == null) {
                 continue;
             }
-            String path = buildFilePath(difyFilesUrl, uploadFileId, metadataFileName);
+            String path = buildFilePath(difyFilesUrl, uploadFileId, uploadFileKey, fileName);
             String key = referenceSourceKey(chunk.documentId(), fileName, uploadFileId, path);
             sources.computeIfAbsent(key, ignored -> new ReferenceSource(
                     sources.size() + 1,
@@ -1311,16 +1306,24 @@ public class RagApiService {
     private ReferenceSource findReferenceSource(
             List<ReferenceSource> sources,
             RetrievedChunk chunk,
-            String docName
+            DocumentMeta documentMeta
     ) {
         Map<String, Object> metadata = chunk.metadata();
         String fileName = metadataValue(metadata, "document_name");
-        String uploadFileId = metadataValue(metadata, "upload_file_id");
-        fileName = firstNonBlank(fileName, docName);
+        String uploadFileId = firstNonBlank(
+                metadataValue(metadata, "upload_file_id"),
+                documentMeta == null ? null : documentMeta.uploadFileId()
+        );
+        fileName = firstNonBlank(fileName, documentMeta == null ? null : documentMeta.name());
         if (fileName == null) {
             return null;
         }
-        String path = buildFilePath(appProperties.getRag().getDifyFilesUrl(), uploadFileId, fileName);
+        String path = buildFilePath(
+                appProperties.getRag().getDifyFilesUrl(),
+                uploadFileId,
+                documentMeta == null ? null : documentMeta.uploadFileKey(),
+                fileName
+        );
         String key = referenceSourceKey(chunk.documentId(), fileName, uploadFileId, path);
         return sources.stream()
                 .filter(source -> source.key().equals(key))
@@ -1407,6 +1410,7 @@ public class RagApiService {
             StageHandle generationHandle,
             AtomicBoolean firstTokenEmitted,
             AtomicReference<Long> firstTokenMsHolder,
+            ReferenceSectionSuppressor referenceSectionSuppressor,
             long generationStart
     ) {
         if (!chunk.delta().isEmpty()) {
@@ -1417,13 +1421,17 @@ public class RagApiService {
                         "requestId", preparedAnswer.retrieval().requestId()
                 ));
             }
-            answerBuilder.append(chunk.delta());
-            eventConsumer.accept(new StreamEvent("delta", new ApiModels.RagAnswerStreamDelta(chunk.delta())));
+            String visibleDelta = referenceSectionSuppressor.append(chunk.delta());
+            if (!visibleDelta.isEmpty()) {
+                answerBuilder.append(visibleDelta);
+                eventConsumer.accept(new StreamEvent("delta", new ApiModels.RagAnswerStreamDelta(visibleDelta)));
+            }
         }
         if (!chunk.metadata().isEmpty()) {
             metadataHolder.set(chunk.metadata());
         }
         if (chunk.completed()) {
+            flushStreamAnswerTail(answerBuilder, referenceSectionSuppressor, preparedAnswer, eventConsumer);
             finishReasonHolder.set(chunk.finishReason());
             log.info("流式问答处理完成，请求ID={}，结束原因={}，结果块数={}",
                     preparedAnswer.retrieval().requestId(),
@@ -1446,6 +1454,24 @@ public class RagApiService {
                     chunk.finishReason(),
                     Map.copyOf(metadata)
             )));
+        }
+    }
+
+    private void flushStreamAnswerTail(
+            StringBuilder answerBuilder,
+            ReferenceSectionSuppressor referenceSectionSuppressor,
+            PreparedAnswer preparedAnswer,
+            Consumer<StreamEvent> eventConsumer
+    ) {
+        String visibleTail = referenceSectionSuppressor.finish();
+        if (!visibleTail.isEmpty()) {
+            answerBuilder.append(visibleTail);
+            eventConsumer.accept(new StreamEvent("delta", new ApiModels.RagAnswerStreamDelta(visibleTail)));
+        }
+        String generatedReferenceSection = backendReferenceSection(answerBuilder.toString(), preparedAnswer.referenceSources());
+        if (!generatedReferenceSection.isEmpty()) {
+            answerBuilder.append(generatedReferenceSection);
+            eventConsumer.accept(new StreamEvent("delta", new ApiModels.RagAnswerStreamDelta(generatedReferenceSection)));
         }
     }
 
@@ -1491,15 +1517,14 @@ public class RagApiService {
             String answer,
             PreparedAnswer preparedAnswer
     ) {
-        String normalizedAnswer = deduplicateReferenceSection(answer);
-        List<ApiModels.Reference> references = filterReferencesByAnswerCitations(
-                buildReferences(preparedAnswer.retrieval().chunks()),
-                normalizedAnswer
-        );
+        String normalizedAnswer = removeReferenceSection(answer);
+        List<ApiModels.Reference> references = shouldOmitBackendReferences(normalizedAnswer)
+                ? List.of()
+                : referencesFromSources(preparedAnswer.referenceSources());
         return new ApiModels.RagAnswerResponse(normalizedAnswer, references);
     }
 
-    private static String deduplicateReferenceSection(String answer) {
+    private static String removeReferenceSection(String answer) {
         if (answer == null || answer.isBlank()) {
             return answer;
         }
@@ -1507,93 +1532,153 @@ public class RagApiService {
         if (!matcher.find()) {
             return answer;
         }
-        int sectionStart = matcher.end();
-        String beforeReferences = answer.substring(0, sectionStart);
-        String referenceSection = answer.substring(sectionStart);
-        String[] lines = referenceSection.split("\\R", -1);
-        Set<String> seenReferences = new java.util.LinkedHashSet<>();
-        List<String> deduplicated = new ArrayList<>(lines.length);
-        for (String line : lines) {
-            String normalized = normalizeReferenceLine(line);
-            if (normalized == null || seenReferences.add(normalized)) {
-                deduplicated.add(line);
+        return trimTrailingWhitespace(answer.substring(0, matcher.start()));
+    }
+
+    private static String trimTrailingWhitespace(String value) {
+        return value.replaceFirst("\\s+$", "");
+    }
+
+    private static boolean shouldOmitBackendReferences(String answer) {
+        return answer == null || answer.isBlank() || answer.contains(UNRELATED_ANSWER_MESSAGE);
+    }
+
+    private String backendReferenceSection(String answer, List<ReferenceSource> references) {
+        if (shouldOmitBackendReferences(answer)) {
+            return "";
+        }
+        if (references.isEmpty()) {
+            return "";
+        }
+        String lineSeparator = System.lineSeparator();
+        StringBuilder section = new StringBuilder(referenceSectionPrefix(answer, lineSeparator));
+        section.append("---")
+                .append(lineSeparator)
+                .append(lineSeparator)
+                .append("###### 参考资料");
+        boolean appended = false;
+        for (ReferenceSource reference : references) {
+            if (reference.path() == null) {
+                section.append(lineSeparator)
+                        .append('[').append(reference.index()).append("] 《")
+                        .append(reference.fileName()).append('》');
+            } else {
+                section.append(lineSeparator)
+                        .append('[').append(reference.index()).append("] [")
+                        .append(reference.fileName()).append("](")
+                        .append(reference.path()).append(')');
             }
+            appended = true;
         }
-        return beforeReferences + String.join(System.lineSeparator(), deduplicated);
+        return appended ? section.toString() : "";
     }
 
-    private static String normalizeReferenceLine(String line) {
-        String normalized = normalizeStatic(line);
-        if (normalized == null || normalized.startsWith("##")) {
-            return null;
+    private static String referenceSectionPrefix(String answer, String lineSeparator) {
+        if (answer.endsWith(lineSeparator + lineSeparator)) {
+            return "";
         }
-        return normalized.replaceFirst("^[-*]\\s*", "");
+        if (answer.endsWith(lineSeparator)) {
+            return lineSeparator;
+        }
+        return lineSeparator + lineSeparator;
     }
 
-    private static List<ApiModels.Reference> filterReferencesByAnswerCitations(
-            List<ApiModels.Reference> references,
-            String answer
-    ) {
-        if (references.isEmpty() || answer == null || answer.isBlank()) {
-            return List.of();
-        }
-        Set<Integer> citedIndexes = citedReferenceIndexes(answer);
-        if (citedIndexes.isEmpty()) {
-            return List.of();
-        }
-        List<ApiModels.Reference> citedReferences = new ArrayList<>();
-        for (int index = 0; index < references.size(); index++) {
-            if (citedIndexes.contains(index + 1)) {
-                citedReferences.add(references.get(index));
-            }
-        }
-        return List.copyOf(citedReferences);
-    }
-
-    private static Set<Integer> citedReferenceIndexes(String answer) {
-        String citationScope = answerContentBeforeReferences(answer);
-        java.util.regex.Matcher matcher = REFERENCE_CITATION_PATTERN.matcher(citationScope);
-        Set<Integer> citedIndexes = new java.util.LinkedHashSet<>();
-        while (matcher.find()) {
-            try {
-                citedIndexes.add(Integer.parseInt(matcher.group(1)));
-            } catch (NumberFormatException ignored) {
-                // Ignore malformed citation numbers.
-            }
-        }
-        return citedIndexes;
-    }
-
-    private static String answerContentBeforeReferences(String answer) {
-        java.util.regex.Matcher matcher = REFERENCE_HEADING_PATTERN.matcher(answer);
-        return matcher.find() ? answer.substring(0, matcher.start()) : answer;
+    private static List<ApiModels.Reference> referencesFromSources(List<ReferenceSource> sources) {
+        return sources.stream()
+                .map(source -> new ApiModels.Reference(source.fileName(), source.path()))
+                .toList();
     }
 
     private List<ApiModels.Reference> buildReferences(List<RetrievedChunk> chunks) {
         String difyFilesUrl = appProperties.getRag().getDifyFilesUrl();
+        Map<String, DocumentMeta> documentMetas = resolveDocumentMetas(chunks);
         return chunks.stream()
-                .map(chunk -> chunk.metadata())
-                .filter(metadata -> metadata.containsKey("document_name") && metadata.containsKey("upload_file_id"))
-                .map(metadata -> {
-                    String fileName = String.valueOf(metadata.get("document_name"));
-                    String uploadFileId = String.valueOf(metadata.get("upload_file_id"));
-                    String path = buildFilePath(difyFilesUrl, uploadFileId, fileName);
+                .filter(chunk -> {
+                    Map<String, Object> metadata = chunk.metadata();
+                    DocumentMeta documentMeta = documentMetas.get(chunk.documentId());
+                    return metadata.containsKey("document_name")
+                            || metadata.containsKey("upload_file_id")
+                            || documentMeta != null;
+                })
+                .map(chunk -> {
+                    Map<String, Object> metadata = chunk.metadata();
+                    DocumentMeta documentMeta = documentMetas.get(chunk.documentId());
+                    String fileName = firstNonBlank(
+                            metadataValue(metadata, "document_name"),
+                            documentMeta == null ? null : documentMeta.name()
+                    );
+                    String uploadFileId = firstNonBlank(
+                            metadataValue(metadata, "upload_file_id"),
+                            documentMeta == null ? null : documentMeta.uploadFileId()
+                    );
+                    String path = buildFilePath(
+                            difyFilesUrl,
+                            uploadFileId,
+                            documentMeta == null ? null : documentMeta.uploadFileKey(),
+                            fileName
+                    );
                     return new ApiModels.Reference(fileName, path);
                 })
+                .filter(reference -> reference.fileName() != null)
                 .distinct()
                 .toList();
     }
 
-    private String buildFilePath(String difyFilesUrl, String uploadFileId, String fileName) {
-        if (difyFilesUrl == null || uploadFileId == null || fileName == null) {
+    private String buildFilePath(String difyFilesUrl, String uploadFileId, String uploadFileKey, String fileName) {
+        if (difyFilesUrl == null || fileName == null) {
+            return null;
+        }
+        String storageFileName = storageFileName(uploadFileKey);
+        if (storageFileName != null) {
+            String base = normalizeFileUrlBase(difyFilesUrl);
+            if (base == null) {
+                return null;
+            }
+            return base + "/" + storageFileName;
+        }
+        if (uploadFileId == null) {
             return null;
         }
         int dotIndex = fileName.lastIndexOf('.');
         String extension = dotIndex >= 0 ? fileName.substring(dotIndex + 1) : "";
-        String base = difyFilesUrl.endsWith("/") ? difyFilesUrl.substring(0, difyFilesUrl.length() - 1) : difyFilesUrl;
+        String base = normalizeFileUrlBase(difyFilesUrl);
+        if (base == null) {
+            return null;
+        }
         return extension.isEmpty()
                 ? base + "/" + uploadFileId
                 : base + "/" + uploadFileId + "." + extension;
+    }
+
+    private static String normalizeFileUrlBase(String difyFilesUrl) {
+        String normalized = normalizeStatic(difyFilesUrl);
+        if (normalized == null) {
+            return null;
+        }
+        if (hasRepeatedUrlScheme(normalized)) {
+            throw new RagServiceException(
+                    RagErrorCode.INVALID_CONFIGURATION,
+                    "app.rag.dify-files-url 配置非法，存在重复协议: " + normalized
+            );
+        }
+        return normalized.endsWith("/") ? normalized.substring(0, normalized.length() - 1) : normalized;
+    }
+
+    private static boolean hasRepeatedUrlScheme(String value) {
+        String lower = value.toLowerCase(java.util.Locale.ROOT);
+        return lower.startsWith("http://http://")
+                || lower.startsWith("https://https://")
+                || lower.startsWith("http://https://")
+                || lower.startsWith("https://http://");
+    }
+
+    private static String storageFileName(String uploadFileKey) {
+        String normalized = normalizeStatic(uploadFileKey);
+        if (normalized == null) {
+            return null;
+        }
+        int slashIndex = normalized.lastIndexOf('/');
+        return slashIndex >= 0 ? normalizeStatic(normalized.substring(slashIndex + 1)) : normalized;
     }
 
     private void recordTrace(String stage, String eventName, Map<String, Object> payload) {
@@ -1662,7 +1747,8 @@ public class RagApiService {
             ExecutionPlan executionPlan,
             RetrievalResult retrieval,
             ModelMeta llmModel,
-            LlmRequest llmRequest
+            LlmRequest llmRequest,
+            List<ReferenceSource> referenceSources
     ) {
     }
 
@@ -1672,5 +1758,50 @@ public class RagApiService {
             String fileName,
             String path
     ) {
+    }
+
+    private static final class ReferenceSectionSuppressor {
+
+        private final StringBuilder pending = new StringBuilder();
+        private boolean suppressing;
+
+        String append(String delta) {
+            if (suppressing || delta == null || delta.isEmpty()) {
+                return "";
+            }
+            pending.append(delta);
+            java.util.regex.Matcher matcher = REFERENCE_HEADING_PATTERN.matcher(pending);
+            if (matcher.find()) {
+                String visible = pending.substring(0, matcher.start());
+                pending.setLength(0);
+                suppressing = true;
+                return visible;
+            }
+            int emitLength = safeEmitLength();
+            if (emitLength == 0) {
+                return "";
+            }
+            String visible = pending.substring(0, emitLength);
+            pending.delete(0, emitLength);
+            return visible;
+        }
+
+        private int safeEmitLength() {
+            int lastLineBreak = Math.max(pending.lastIndexOf("\n"), pending.lastIndexOf("\r"));
+            if (lastLineBreak >= 0) {
+                return lastLineBreak + 1;
+            }
+            return Math.max(0, pending.length() - REFERENCE_SECTION_DETECTION_GUARD_CHARS);
+        }
+
+        String finish() {
+            if (suppressing || pending.isEmpty()) {
+                pending.setLength(0);
+                return "";
+            }
+            String visible = pending.toString();
+            pending.setLength(0);
+            return visible;
+        }
     }
 }

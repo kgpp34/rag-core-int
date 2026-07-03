@@ -224,7 +224,7 @@ flowchart TB
     - `default-temperature`
     - `default-max-tokens`
 - `TraceLoggingFilter`
-  - 注入 `traceId`
+  - 注入调用方提供的 `traceId`
   - 记录请求开始 / 结束日志
 - `GlobalExceptionHandler`
   - 把业务异常转换为统一错误响应
@@ -582,7 +582,7 @@ flowchart TD
 
 ### 10.3 traceId 与日志
 
-`TraceLoggingFilter` 会为每个请求生成或透传 `X-Trace-Id`，并：
+`TraceLoggingFilter` 会透传调用方提供的 `X-Trace-Id`，并：
 
 - 在 MDC 中写入 `traceId`
 - 写回响应头

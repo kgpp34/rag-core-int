@@ -79,7 +79,7 @@ class RetrievalExecutionServiceTest {
         when(multiKnowledgeBaseRecallService.recall(eq(preprocessedQuery), any(RetrievalExecutionContext.class)))
                 .thenReturn(List.of(candidate));
         when(metadataQueryService.getDocumentMetas(List.of("doc-1"))).thenReturn(Map.of(
-                "doc-1", new DocumentMeta("doc-1", "kb-1", "Document A", "file-123")
+                "doc-1", new DocumentMeta("doc-1", "kb-1", "Document A", "file-123", null)
         ));
         when(weightedRankingService.rank(
                 "rewritten hello",
@@ -127,7 +127,7 @@ class RetrievalExecutionServiceTest {
         when(multiKnowledgeBaseRecallService.recall(eq(preprocessedQuery), any(RetrievalExecutionContext.class)))
                 .thenReturn(List.of(candidate));
         when(metadataQueryService.getDocumentMetas(List.of("doc-1"))).thenReturn(Map.of(
-                "doc-1", new DocumentMeta("doc-1", "kb-1", "Document A", "file-123")
+                "doc-1", new DocumentMeta("doc-1", "kb-1", "Document A", "file-123", null)
         ));
         when(rerankRankingService.rank(
                 "rewritten hello",
@@ -285,7 +285,7 @@ class RetrievalExecutionServiceTest {
         when(multiKnowledgeBaseRecallService.recall(eq(preprocessedQuery), any(RetrievalExecutionContext.class)))
                 .thenReturn(List.of(candidate));
         when(metadataQueryService.getDocumentMetas(List.of("doc-1"))).thenReturn(Map.of(
-                "doc-1", new DocumentMeta("doc-1", "kb-1", "Document A", "file-123")
+                "doc-1", new DocumentMeta("doc-1", "kb-1", "Document A", "file-123", null)
         ));
         when(weightedRankingService.rank(
                 "rewritten hello",

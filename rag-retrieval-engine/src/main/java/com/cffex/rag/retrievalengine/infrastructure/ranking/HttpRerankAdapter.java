@@ -2,21 +2,28 @@ package com.cffex.rag.retrievalengine.infrastructure.ranking;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import com.cffex.rag.retrievalengine.config.RetrievalHttpClientProperties;
 import com.cffex.rag.retrievalengine.domain.RetrievalCandidate;
 import com.cffex.rag.retrievalengine.domain.model.RerankModelPolicy;
 import com.cffex.rag.retrievalengine.domain.port.RerankPort;
+import com.cffex.rag.retrievalengine.infrastructure.http.PoolingRestClientFactory;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 基于 HTTP 的 rerank 适配器。
@@ -33,11 +40,21 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public class HttpRerankAdapter implements RerankPort {
 
     private static final Logger log = LoggerFactory.getLogger(HttpRerankAdapter.class);
+    private static final AtomicLong RERANK_SEQUENCE = new AtomicLong();
+    private static final ObjectMapper OBSERVABILITY_OBJECT_MAPPER = new ObjectMapper();
 
-    private final RestClient.Builder restClientBuilder;
+    private final RestClient restClient;
 
-    public HttpRerankAdapter(RestClient.Builder restClientBuilder) {
-        this.restClientBuilder = restClientBuilder;
+    @Autowired
+    public HttpRerankAdapter(
+            RestClient.Builder restClientBuilder,
+            RetrievalHttpClientProperties httpClientProperties
+    ) {
+        this.restClient = PoolingRestClientFactory.create(restClientBuilder, httpClientProperties);
+    }
+
+    HttpRerankAdapter(RestClient restClient) {
+        this.restClient = restClient;
     }
 
     @Override
@@ -59,6 +76,32 @@ public class HttpRerankAdapter implements RerankPort {
         // 再依赖返回的 index 反查回原始 candidateKey。
         String requestUrl = resolveRerankRequestUrl(policy.endpoint());
         RerankRequest requestBody = buildRerankRequest(policy.model(), query, documents, topN, scoreThreshold);
+        long callId = RERANK_SEQUENCE.incrementAndGet();
+        long startNanos = System.nanoTime();
+        int bodyBytes = jsonBytes(requestBody);
+        int documentChars = documents.stream()
+                .mapToInt(document -> document == null ? 0 : document.length())
+                .sum();
+        List<String> knowledgeBaseIds = uniqueCandidates.stream()
+                .map(RetrievalCandidate::knowledgeBaseId)
+                .distinct()
+                .limit(10)
+                .toList();
+        log.info(
+                "RERANK_HTTP_START | callId={} url={} model={} queryChars={} candidateCount={} uniqueCount={} topN={} scoreThreshold={} documentChars={} estimatedBodyBytes={} kbIds={} thread={}",
+                callId,
+                requestUrl,
+                policy.model(),
+                query == null ? 0 : query.length(),
+                candidates.size(),
+                uniqueCandidates.size(),
+                requestBody.topN(),
+                scoreThreshold,
+                documentChars,
+                bodyBytes,
+                knowledgeBaseIds,
+                Thread.currentThread().getName()
+        );
         log.debug(
                 "调用 rerank 接口 | url={}, model={}, candidateCount={}, uniqueCount={}, topN={}, scoreThreshold={}",
                 requestUrl,
@@ -69,18 +112,55 @@ public class HttpRerankAdapter implements RerankPort {
                 scoreThreshold
         );
 
-        RerankResponse response = restClientBuilder
-                .build()
-                .post()
-                .uri(requestUrl)
-                .header("Authorization", "Bearer " + policy.authToken())
-                .body(requestBody)
-                .retrieve()
-                .body(RerankResponse.class);
+        RerankResponse response;
+        try {
+            response = restClient
+                    .post()
+                    .uri(requestUrl)
+                    .header("Authorization", "Bearer " + policy.authToken())
+                    .header("X-Rag-Rerank-Call-Id", Long.toString(callId))
+                    .body(requestBody)
+                    .retrieve()
+                    .body(RerankResponse.class);
+        } catch (RuntimeException ex) {
+            log.warn(
+                    "RERANK_HTTP_ERROR | callId={} elapsedMs={} candidateCount={} uniqueCount={} estimatedBodyBytes={} error={} thread={}",
+                    callId,
+                    elapsedMs(startNanos),
+                    candidates.size(),
+                    uniqueCandidates.size(),
+                    bodyBytes,
+                    ex.toString(),
+                    Thread.currentThread().getName()
+            );
+            throw ex;
+        }
 
         if (response == null || response.results() == null) {
+            log.info(
+                    "RERANK_HTTP_END | callId={} elapsedMs={} results=0 nullResponse=true candidateCount={} uniqueCount={} estimatedBodyBytes={} thread={}",
+                    callId,
+                    elapsedMs(startNanos),
+                    candidates.size(),
+                    uniqueCandidates.size(),
+                    bodyBytes,
+                    Thread.currentThread().getName()
+            );
             return Map.of();
         }
+
+        log.info(
+                "RERANK_HTTP_END | callId={} elapsedMs={} results={} candidateCount={} uniqueCount={} estimatedBodyBytes={} promptTokens={} totalTokens={} thread={}",
+                callId,
+                elapsedMs(startNanos),
+                response.results().size(),
+                candidates.size(),
+                uniqueCandidates.size(),
+                bodyBytes,
+                response.usage() == null ? 0 : response.usage().promptTokens(),
+                response.usage() == null ? 0 : response.usage().totalTokens(),
+                Thread.currentThread().getName()
+        );
 
         if (response.usage() != null) {
             log.debug(
@@ -207,6 +287,20 @@ public class HttpRerankAdapter implements RerankPort {
     private static String abbreviate(String text, int maxLength) {
         String normalized = text == null ? "" : text.replaceAll("\\s+", " ").trim();
         return normalized.length() <= maxLength ? normalized : normalized.substring(0, maxLength) + "...";
+    }
+
+    private static int jsonBytes(RerankRequest requestBody) {
+        try {
+            return OBSERVABILITY_OBJECT_MAPPER.writeValueAsBytes(requestBody).length;
+        } catch (JsonProcessingException ex) {
+            return requestBody.documents().stream()
+                    .mapToInt(document -> document == null ? 0 : document.getBytes(StandardCharsets.UTF_8).length)
+                    .sum();
+        }
+    }
+
+    private static long elapsedMs(long startNanos) {
+        return (System.nanoTime() - startNanos) / 1_000_000L;
     }
 
     private static String trimTrailingSlash(String endpoint) {

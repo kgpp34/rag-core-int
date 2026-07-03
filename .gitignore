@@ -11,4 +11,4 @@ __pycache__/
 env
 logs/
 app/logs/
-rag.tar
+*.tar

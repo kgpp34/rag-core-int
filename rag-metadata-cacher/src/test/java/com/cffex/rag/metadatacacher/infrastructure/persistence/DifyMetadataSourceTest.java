@@ -33,7 +33,13 @@ class DifyMetadataSourceTest {
                         null, false, false, 0.0d, 0.7d, 0.3d)
         ));
         FakeDocumentMapper documentMapper = new FakeDocumentMapper(List.of(
-                new DifyDocumentMapper.DocumentRow("doc-1", "kb-1", "document-a", "{\"upload_file_id\":\"file-123\"}")
+                new DifyDocumentMapper.DocumentRow(
+                        "doc-1",
+                        "kb-1",
+                        "document-a",
+                        "{\"upload_file_id\":\"file-123\"}",
+                        "upload_files/tenant-a/storage-file.pdf"
+                )
         ));
         FakeProviderModelMapper providerModelMapper = new FakeProviderModelMapper(List.of(
                 new DifyProviderModelMapper.ProviderModelRow("model-1", "tenant-a", "openai", "text-embedding-3-small", "text_embedding", "{}", true)
@@ -59,6 +65,7 @@ class DifyMetadataSourceTest {
         assertEquals(1, payload.modelsById().size());
         assertEquals("document-a", payload.documentMetasById().get("doc-1").name());
         assertEquals("file-123", payload.documentMetasById().get("doc-1").uploadFileId());
+        assertEquals("upload_files/tenant-a/storage-file.pdf", payload.documentMetasById().get("doc-1").uploadFileKey());
         assertEquals(15, payload.knowledgeBasesById().get("kb-1").topK());
         assertEquals("知识库一", payload.knowledgeBasesById().get("kb-1").name());
         assertEquals(true, payload.knowledgeBasesById().get("kb-1").rerankingEnabled());
