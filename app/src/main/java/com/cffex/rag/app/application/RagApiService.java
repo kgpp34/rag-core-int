@@ -60,6 +60,8 @@ import com.cffex.rag.common.service.ConversationMemoryService;
 import com.cffex.rag.trace.application.NoOpTraceRecorder;
 import com.cffex.rag.trace.application.TraceRecorder;
 import com.cffex.rag.trace.config.TraceProperties;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * RAG API 应用服务。
@@ -71,6 +73,7 @@ import com.cffex.rag.trace.config.TraceProperties;
 public class RagApiService {
 
     private static final Logger log = LoggerFactory.getLogger(RagApiService.class);
+    private static final ObjectMapper QUERY_REWRITE_OBJECT_MAPPER = new ObjectMapper();
     private static final Set<String> SUMMARY_TRACE_EVENTS = Set.of(
             "rag.request.received",
             "query_rewrite.summary",
@@ -133,14 +136,14 @@ public class RagApiService {
 
     public ApiModels.RetrievalResponse search(ApiModels.QueryRequest request) {
         long start = System.nanoTime();
-        recordTrace("request", "rag.request.received", Map.of(
-                "endpointType", "search",
-                "originalQuery", request.query(),
-                "queryLength", request.query().length(),
-                "docFilterCount", safeList(request.docIds()).size(),
-                "planType", Objects.toString(request.planType(), "default"),
-                "queryRewriteEnabled", Objects.toString(queryRewriteEnabled(request), "default"),
-                "stream", false
+        recordTrace("request", "rag.request.received", requestReceivedPayload(
+                "search",
+                request.query(),
+                safeList(request.docIds()),
+                request.planType(),
+                queryRewriteEnabled(request),
+                null,
+                false
         ));
         log.info("开始处理检索请求，问题长度={}，文档数={}，计划类型={}，queryRewrite={}",
                 request.query().length(),
@@ -177,14 +180,14 @@ public class RagApiService {
 
     public ApiModels.RagAnswerResponse answer(ApiModels.RagAnswerRequest request) {
         long start = System.nanoTime();
-        recordTrace("request", "rag.request.received", Map.of(
-                "endpointType", "answer",
-                "originalQuery", request.query(),
-                "queryLength", request.query().length(),
-                "docFilterCount", safeList(request.docIds()).size(),
-                "planType", Objects.toString(request.planType(), "default"),
-                "queryRewriteEnabled", Objects.toString(queryRewriteEnabled(request), "default"),
-                "stream", false
+        recordTrace("request", "rag.request.received", requestReceivedPayload(
+                "answer",
+                request.query(),
+                safeList(request.docIds()),
+                request.planType(),
+                queryRewriteEnabled(request),
+                request.memory() == null ? null : request.memory().conversationId(),
+                false
         ));
         log.info("开始处理问答请求，问题长度={}，文档数={}，计划类型={}，流式={}",
                 request.query().length(),
@@ -219,14 +222,14 @@ public class RagApiService {
             Consumer<StreamEvent> eventConsumer
     ) {
         long start = System.nanoTime();
-        recordTrace("request", "rag.request.received", Map.of(
-                "endpointType", "answer",
-                "originalQuery", request.query(),
-                "queryLength", request.query().length(),
-                "docFilterCount", safeList(request.docIds()).size(),
-                "planType", Objects.toString(request.planType(), "default"),
-                "queryRewriteEnabled", Objects.toString(queryRewriteEnabled(request), "default"),
-                "stream", true
+        recordTrace("request", "rag.request.received", requestReceivedPayload(
+                "answer",
+                request.query(),
+                safeList(request.docIds()),
+                request.planType(),
+                queryRewriteEnabled(request),
+                request.memory() == null ? null : request.memory().conversationId(),
+                true
         ));
         log.info("开始处理问答请求，问题长度={}，文档数={}，计划类型={}，流式={}",
                 request.query().length(),
@@ -314,17 +317,17 @@ public class RagApiService {
                     null,
                     Map.of()
             )));
-            recordTrace("answer_generation", "answer_generation.summary", Map.of(
-                    "requestId", preparedAnswer.retrieval().requestId(),
-                    "model", preparedAnswer.llmRequest().modelEndpoint().model(),
-                    "finishReason", "",
-                    "answerLength", answerBuilder.length(),
-                    "answerContent", answerBuilder.toString(),
-                    "userPrompt", lastUserPrompt(preparedAnswer.llmRequest()),
-                    "firstTokenMs", Objects.requireNonNullElse(firstTokenMsHolder.get(), -1L),
-                    "elapsedMs", durationMs(generationStart),
-                    "stream", true
-            ));
+            Map<String, Object> tracePayload = new LinkedHashMap<>();
+            tracePayload.put("requestId", preparedAnswer.retrieval().requestId());
+            tracePayload.put("model", preparedAnswer.llmRequest().modelEndpoint().model());
+            tracePayload.put("finishReason", "");
+            tracePayload.put("answerLength", answerBuilder.length());
+            tracePayload.put("answerContent", answerBuilder.toString());
+            appendLlmRequestTraceFields(tracePayload, preparedAnswer.llmRequest());
+            tracePayload.put("firstTokenMs", Objects.requireNonNullElse(firstTokenMsHolder.get(), -1L));
+            tracePayload.put("elapsedMs", durationMs(generationStart));
+            tracePayload.put("stream", true);
+            recordTrace("answer_generation", "answer_generation.summary", tracePayload);
         }
     }
 
@@ -589,7 +592,13 @@ public class RagApiService {
         ModelMeta llmModel = resolveLlmModel(null);
         LlmRequest llmRequest = new LlmRequest(
                 toEndpoint(llmModel),
-                buildAnswerMessages(executionPlan, request, retrieval.chunks(), documentMetas, referenceSources),
+                buildAnswerMessages(
+                        executionPlan,
+                        request,
+                        retrieval.chunks(),
+                        documentMetas,
+                        referenceSources
+                ),
                 appProperties.getRag().getAnswer().getDefaultTemperature(),
                 appProperties.getRag().getAnswer().getDefaultMaxTokens(),
                 memoryContext.userId(),
@@ -815,6 +824,9 @@ public class RagApiService {
                     originalQuery,
                     List.of(),
                     List.of(originalQuery),
+                    originalQuery,
+                    false,
+                    originalQuery,
                     knowledgeBases,
                     List.of(result),
                     result,
@@ -826,11 +838,12 @@ public class RagApiService {
             return result;
         }
 
-        List<String> subQueries = rewriteQuery(originalQuery, queryRewritePrompt, eventPublisher, conversationId);
-        List<String> allQueries = new ArrayList<>();
-        allQueries.add(originalQuery);
-        allQueries.addAll(subQueries);
-        log.info("Query 改写完成，原始query + 子query数={}", allQueries.size());
+        QueryRewriteResult rewriteResult = rewriteQuery(originalQuery, queryRewritePrompt, eventPublisher, conversationId);
+        List<String> subQueries = rewriteResult.retrievalQueries();
+        List<String> allQueries = rewriteResult.executedQueries(originalQuery);
+        String rerankQuery = rewriteResult.rerankQuery(originalQuery);
+        log.info("Query 改写完成，dependsOnHistory={}，执行query数={}，rerankQuery={}",
+                rewriteResult.dependsOnHistory(), allQueries.size(), preview(rerankQuery));
 
         List<RetrievalResult> results = executeRetrievalQueriesInParallel(basePlan, allQueries, eventPublisher);
 
@@ -848,9 +861,9 @@ public class RagApiService {
             long rerankStart = System.nanoTime();
             merged = withKnowledgeBaseNames(merged, knowledgeBases);
             merged = eventPublisher == RagProcessEventPublisher.NO_OP
-                    ? retrievalEngine.rerank(originalQuery, merged, rerankModel, basePlan.topK())
+                    ? retrievalEngine.rerank(rerankQuery, merged, rerankModel, basePlan.topK())
                     : retrievalEngine.rerank(
-                            originalQuery,
+                            rerankQuery,
                             merged,
                             rerankModel,
                             basePlan.topK(),
@@ -869,7 +882,9 @@ public class RagApiService {
                 "queryCount", allQueries.size(),
                 "mergedCount", merged.size(),
                 "finalCount", merged.size(),
-                "rerankApplied", rerankApplied
+                "rerankApplied", rerankApplied,
+                "dependsOnHistory", rewriteResult.dependsOnHistory(),
+                "rerankQuery", rerankQuery
         ));
         RetrievalResult finalResult = new RetrievalResult(UUID.randomUUID().toString(), merged, Map.of(
                 "ranking_mode", rerankApplied ? "rewrite_merge_rerank" : "rewrite_merge_score_sort",
@@ -879,6 +894,9 @@ public class RagApiService {
                 originalQuery,
                 subQueries,
                 allQueries,
+                rerankQuery,
+                rewriteResult.dependsOnHistory(),
+                rewriteResult.resolvedQuestion(),
                 knowledgeBases,
                 results,
                 finalResult,
@@ -987,6 +1005,9 @@ public class RagApiService {
             String originalQuery,
             List<String> rewrittenQueries,
             List<String> executedQueries,
+            String rerankQuery,
+            boolean dependsOnHistory,
+            String resolvedQuestion,
             List<Map<String, Object>> knowledgeBases,
             List<RetrievalResult> queryResults,
             RetrievalResult finalResult,
@@ -1002,6 +1023,9 @@ public class RagApiService {
         payload.put("rewrittenQueries", rewrittenQueries);
         payload.put("executedQueryCount", executedQueries.size());
         payload.put("executedQueries", executedQueries);
+        payload.put("dependsOnHistory", dependsOnHistory);
+        payload.put("resolvedQuestion", Objects.toString(resolvedQuestion, ""));
+        payload.put("rerankQuery", Objects.toString(rerankQuery, ""));
         payload.put("knowledgeBaseCount", knowledgeBases.size());
         payload.put("knowledgeBases", knowledgeBases);
         payload.put("perQueryResults", perQueryResults(executedQueries, queryResults));
@@ -1074,7 +1098,7 @@ public class RagApiService {
         return List.copyOf(rows);
     }
 
-    private List<String> rewriteQuery(
+    private QueryRewriteResult rewriteQuery(
             String originalQuery,
             String queryRewritePrompt,
             RagProcessEventPublisher eventPublisher,
@@ -1122,19 +1146,22 @@ public class RagApiService {
                     "finishReason", Objects.toString(response.finishReason(), "")
             ));
             int maxQueries = appProperties.getRag().getAnswer().getQueryRewrite().getMaxRewriteQueries();
-            List<String> subQueries = parseRewrittenQueries(response.content(), maxQueries);
-            log.info("Query 改写生成子query数={}", subQueries.size());
-            eventPublisher.complete(handle, Map.of("queryCount", subQueries.size() + 1));
-            recordTrace("query_rewrite", "query_rewrite.summary", Map.of(
-                    "originalQuery", originalQuery,
-                    "rewrittenCount", subQueries.size(),
-                    "totalQueryCount", subQueries.size() + 1,
-                    "rewrittenQueries", subQueries,
-                    "modelId", llmModel.modelId(),
-                    "historyUserMessageCount", historyUserMessages.size(),
-                    "elapsedMs", durationMs(start)
-            ));
-            return subQueries;
+            QueryRewriteResult rewriteResult = parseQueryRewriteResult(response.content(), maxQueries, originalQuery);
+            log.info("Query 改写生成子query数={}，dependsOnHistory={}",
+                    rewriteResult.retrievalQueries().size(), rewriteResult.dependsOnHistory());
+            eventPublisher.complete(handle, Map.of("queryCount", rewriteResult.executedQueryCount(originalQuery)));
+            Map<String, Object> summary = new LinkedHashMap<>();
+            summary.put("originalQuery", originalQuery);
+            summary.put("rewrittenCount", rewriteResult.retrievalQueries().size());
+            summary.put("totalQueryCount", rewriteResult.executedQueryCount(originalQuery));
+            summary.put("rewrittenQueries", rewriteResult.retrievalQueries());
+            summary.put("dependsOnHistory", rewriteResult.dependsOnHistory());
+            summary.put("resolvedQuestion", rewriteResult.resolvedQuestion());
+            summary.put("modelId", llmModel.modelId());
+            summary.put("historyUserMessageCount", historyUserMessages.size());
+            summary.put("elapsedMs", durationMs(start));
+            recordTrace("query_rewrite", "query_rewrite.summary", summary);
+            return rewriteResult;
         } catch (Exception ex) {
             log.warn("Query 改写失败，降级为原始query检索: {}", summarize(ex));
             eventPublisher.fallback(handle, Map.of("queryCount", 1));
@@ -1147,7 +1174,7 @@ public class RagApiService {
                     "reason", summarize(ex),
                     "elapsedMs", durationMs(start)
             ));
-            return List.of();
+            return QueryRewriteResult.fallback();
         }
     }
 
@@ -1185,16 +1212,72 @@ public class RagApiService {
         return prompt.toString();
     }
 
-    private List<String> parseRewrittenQueries(String content, int maxQueries) {
+    private QueryRewriteResult parseQueryRewriteResult(String content, int maxQueries, String originalQuery) {
         if (content == null || content.isBlank()) {
-            return List.of();
+            return QueryRewriteResult.fallback();
         }
-        return content.lines()
+        QueryRewriteResult jsonResult = parseJsonQueryRewriteResult(content, maxQueries, originalQuery);
+        if (!jsonResult.retrievalQueries().isEmpty() || jsonResult.dependsOnHistory()) {
+            return jsonResult;
+        }
+        List<String> queries = content.lines()
                 .map(String::trim)
                 .filter(line -> !line.isEmpty())
+                .filter(line -> !line.startsWith("{") && !line.startsWith("}") && !line.startsWith("\""))
                 .filter(line -> !line.matches("^\\d+[.、)\\s].*"))
                 .limit(maxQueries)
                 .toList();
+        return new QueryRewriteResult(false, originalQuery, queries);
+    }
+
+    private QueryRewriteResult parseJsonQueryRewriteResult(String content, int maxQueries, String originalQuery) {
+        String json = extractJsonObject(content);
+        if (json == null) {
+            return QueryRewriteResult.fallback();
+        }
+        try {
+            JsonNode root = QUERY_REWRITE_OBJECT_MAPPER.readTree(json);
+            boolean dependsOnHistory = root.path("dependsOnHistory").asBoolean(false);
+            String resolvedQuestion = normalize(root.path("resolvedQuestion").asText(""));
+            if (resolvedQuestion == null) {
+                resolvedQuestion = originalQuery;
+            }
+            JsonNode queries = root.get("retrievalQueries");
+            List<String> rewrittenQueries = new ArrayList<>();
+            if (queries != null && queries.isArray()) {
+                for (JsonNode query : queries) {
+                    if (rewrittenQueries.size() >= maxQueries) {
+                        break;
+                    }
+                    if (query != null && query.isTextual()) {
+                        String text = query.asText().trim();
+                        if (!text.isBlank()) {
+                            rewrittenQueries.add(text);
+                        }
+                    }
+                }
+            }
+            if (dependsOnHistory && rewrittenQueries.isEmpty()) {
+                rewrittenQueries.add(resolvedQuestion);
+            }
+            return new QueryRewriteResult(dependsOnHistory, resolvedQuestion, rewrittenQueries);
+        } catch (RuntimeException ex) {
+            log.warn("Query 改写 JSON 解析失败，将使用按行解析兜底: {}", summarize(ex));
+            return QueryRewriteResult.fallback();
+        } catch (Exception ex) {
+            log.warn("Query 改写 JSON 解析失败，将使用按行解析兜底: {}", summarize(ex));
+            return QueryRewriteResult.fallback();
+        }
+    }
+
+    private static String extractJsonObject(String content) {
+        String normalized = content == null ? "" : content.trim();
+        int start = normalized.indexOf('{');
+        int end = normalized.lastIndexOf('}');
+        if (start < 0 || end <= start) {
+            return null;
+        }
+        return normalized.substring(start, end + 1);
     }
 
     private RetrievalPlan withQuery(RetrievalPlan plan, String newQuery) {
@@ -1352,16 +1435,16 @@ public class RagApiService {
         ));
         try {
             LlmResponse response = llmService.generate(llmRequest);
-            recordTrace("answer_generation", "answer_generation.summary", Map.of(
-                    "model", llmRequest.modelEndpoint().model(),
-                    "finishReason", Objects.toString(response.finishReason(), ""),
-                    "answerLength", response.content() == null ? 0 : response.content().length(),
-                    "answerContent", Objects.toString(response.content(), ""),
-                    "userPrompt", lastUserPrompt(llmRequest),
-                    "firstTokenMs", -1,
-                    "elapsedMs", durationMs(start),
-                    "stream", false
-            ));
+            Map<String, Object> tracePayload = new LinkedHashMap<>();
+            tracePayload.put("model", llmRequest.modelEndpoint().model());
+            tracePayload.put("finishReason", Objects.toString(response.finishReason(), ""));
+            tracePayload.put("answerLength", response.content() == null ? 0 : response.content().length());
+            tracePayload.put("answerContent", Objects.toString(response.content(), ""));
+            appendLlmRequestTraceFields(tracePayload, llmRequest);
+            tracePayload.put("firstTokenMs", -1);
+            tracePayload.put("elapsedMs", durationMs(start));
+            tracePayload.put("stream", false);
+            recordTrace("answer_generation", "answer_generation.summary", tracePayload);
             return response;
         } catch (RagServiceException ex) {
             recordTrace("answer_generation", "answer_generation.failed", Map.of(
@@ -1445,7 +1528,7 @@ public class RagApiService {
             tracePayload.put("model", preparedAnswer.llmRequest().modelEndpoint().model());
             tracePayload.put("answerLength", answerBuilder.length());
             tracePayload.put("answerContent", answerBuilder.toString());
-            tracePayload.put("userPrompt", lastUserPrompt(preparedAnswer.llmRequest()));
+            appendLlmRequestTraceFields(tracePayload, preparedAnswer.llmRequest());
             tracePayload.put("firstTokenMs", Objects.requireNonNullElse(firstTokenMsHolder.get(), -1L));
             tracePayload.put("stream", true);
             tracePayload.put("elapsedMs", durationMs(generationStart));
@@ -1498,6 +1581,23 @@ public class RagApiService {
             }
         }
         return "";
+    }
+
+    private static String systemPrompt(LlmRequest llmRequest) {
+        for (LlmMessage message : llmRequest.messages()) {
+            if (message.role() == LlmMessageRole.SYSTEM) {
+                return Objects.toString(message.content(), "");
+            }
+        }
+        return "";
+    }
+
+    private static void appendLlmRequestTraceFields(Map<String, Object> payload, LlmRequest llmRequest) {
+        payload.put("systemPrompt", systemPrompt(llmRequest));
+        payload.put("userPrompt", lastUserPrompt(llmRequest));
+        payload.put("memoryEnabled", llmRequest.conversationId() != null && !llmRequest.conversationId().isBlank());
+        payload.put("conversationId", Objects.toString(llmRequest.conversationId(), ""));
+        payload.put("baseMessageCount", llmRequest.messages().size());
     }
 
     private static void copyIfPresent(
@@ -1728,6 +1828,46 @@ public class RagApiService {
         return Map.copyOf(payload);
     }
 
+    private Map<String, Object> requestReceivedPayload(
+            String endpointType,
+            String query,
+            List<String> docIds,
+            Object planType,
+            Boolean queryRewriteEnabled,
+            String conversationId,
+            boolean stream
+    ) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("endpointType", endpointType);
+        payload.put("originalQuery", query);
+        payload.put("queryLength", query.length());
+        payload.put("docFilterCount", docIds.size());
+        payload.put("docFilterKnowledgeBases", resolveDocFilterKnowledgeBasesForTrace(docIds));
+        payload.put("conversationId", Objects.toString(conversationId, ""));
+        payload.put("planType", Objects.toString(planType, "default"));
+        payload.put("queryRewriteEnabled", Objects.toString(queryRewriteEnabled, "default"));
+        payload.put("stream", stream);
+        return Map.copyOf(payload);
+    }
+
+    private List<Map<String, Object>> resolveDocFilterKnowledgeBasesForTrace(List<String> docIds) {
+        if (docIds.isEmpty()) {
+            return List.of();
+        }
+        try {
+            return metadataQueryService.listKnowledgeBases(new KnowledgeBaseQueryCondition(docIds))
+                    .stream()
+                    .map(knowledgeBase -> Map.<String, Object>of(
+                            "knowledgeBaseId", knowledgeBase.knowledgeBaseId(),
+                            "name", knowledgeBase.name()
+                    ))
+                    .toList();
+        } catch (RuntimeException ex) {
+            log.warn("trace解析docIds对应知识库失败 | docCount={}, error={}", docIds.size(), summarize(ex));
+            return List.of();
+        }
+    }
+
     private static long durationMs(long startNano) {
         return (System.nanoTime() - startNano) / 1_000_000;
     }
@@ -1758,6 +1898,64 @@ public class RagApiService {
             String fileName,
             String path
     ) {
+    }
+
+    private record QueryRewriteResult(
+            boolean dependsOnHistory,
+            String resolvedQuestion,
+            List<String> retrievalQueries
+    ) {
+        private QueryRewriteResult {
+            resolvedQuestion = normalizeStatic(resolvedQuestion);
+            retrievalQueries = distinctNonBlank(retrievalQueries);
+        }
+
+        static QueryRewriteResult fallback() {
+            return new QueryRewriteResult(false, null, List.of());
+        }
+
+        List<String> executedQueries(String originalQuery) {
+            if (dependsOnHistory) {
+                if (!retrievalQueries.isEmpty()) {
+                    return retrievalQueries;
+                }
+                String resolved = normalizeStatic(resolvedQuestion);
+                return resolved == null ? List.of(originalQuery) : List.of(resolved);
+            }
+            List<String> queries = new ArrayList<>();
+            queries.add(originalQuery);
+            queries.addAll(retrievalQueries);
+            return distinctNonBlank(queries);
+        }
+
+        int executedQueryCount(String originalQuery) {
+            return executedQueries(originalQuery).size();
+        }
+
+        String rerankQuery(String originalQuery) {
+            if (!dependsOnHistory) {
+                return originalQuery;
+            }
+            String resolved = normalizeStatic(resolvedQuestion);
+            if (resolved != null) {
+                return resolved;
+            }
+            return retrievalQueries.isEmpty() ? originalQuery : retrievalQueries.get(0);
+        }
+
+        private static List<String> distinctNonBlank(List<String> values) {
+            if (values == null || values.isEmpty()) {
+                return List.of();
+            }
+            Map<String, String> byText = new LinkedHashMap<>();
+            for (String value : values) {
+                String normalized = normalizeStatic(value);
+                if (normalized != null) {
+                    byText.putIfAbsent(normalized, normalized);
+                }
+            }
+            return List.copyOf(byText.values());
+        }
     }
 
     private static final class ReferenceSectionSuppressor {

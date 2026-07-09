@@ -35,8 +35,23 @@ public class ReliableMessageChatMemoryAdvisor implements BaseAdvisor {
 
     private final Scheduler scheduler;
 
+    private final LlmMessageTraceSupport traceSupport;
+
+    private final String traceId;
+
     public ReliableMessageChatMemoryAdvisor(ChatMemory chatMemory, String defaultConversationId, int order,
             Scheduler scheduler) {
+        this(chatMemory, defaultConversationId, order, scheduler, null, null);
+    }
+
+    public ReliableMessageChatMemoryAdvisor(
+            ChatMemory chatMemory,
+            String defaultConversationId,
+            int order,
+            Scheduler scheduler,
+            LlmMessageTraceSupport traceSupport,
+            String traceId
+    ) {
         Assert.notNull(chatMemory, "chatMemory cannot be null");
         Assert.hasText(defaultConversationId, "defaultConversationId cannot be null or empty");
         Assert.notNull(scheduler, "scheduler cannot be null");
@@ -44,6 +59,8 @@ public class ReliableMessageChatMemoryAdvisor implements BaseAdvisor {
         this.defaultConversationId = defaultConversationId;
         this.order = order;
         this.scheduler = scheduler;
+        this.traceSupport = traceSupport;
+        this.traceId = traceId;
     }
 
     @Override
@@ -60,11 +77,16 @@ public class ReliableMessageChatMemoryAdvisor implements BaseAdvisor {
     public ChatClientRequest before(ChatClientRequest chatClientRequest, AdvisorChain advisorChain) {
         String conversationId = getConversationId(chatClientRequest.context(), this.defaultConversationId);
 
-        List<Message> messages = new ArrayList<>(this.chatMemory.get(conversationId));
-        messages.addAll(chatClientRequest.prompt().getInstructions());
+        List<Message> memoryMessages = new ArrayList<>(this.chatMemory.get(conversationId));
+        List<Message> currentInstructions = chatClientRequest.prompt().getInstructions();
+        List<Message> messages = new ArrayList<>(memoryMessages);
+        messages.addAll(currentInstructions);
         ChatClientRequest requestWithMemory = chatClientRequest.mutate()
                 .prompt(chatClientRequest.prompt().mutate().messages(messages).build())
                 .build();
+        if (traceSupport != null) {
+            traceSupport.recordFinalMessages(traceId, conversationId, memoryMessages, currentInstructions, messages);
+        }
 
         UserMessage userMessage = requestWithMemory.prompt().getUserMessage();
         this.chatMemory.add(conversationId, userMessage);
@@ -126,6 +148,10 @@ public class ReliableMessageChatMemoryAdvisor implements BaseAdvisor {
 
         private ChatMemory chatMemory;
 
+        private LlmMessageTraceSupport traceSupport;
+
+        private String traceId;
+
         private Builder(ChatMemory chatMemory) {
             this.chatMemory = chatMemory;
         }
@@ -145,8 +171,25 @@ public class ReliableMessageChatMemoryAdvisor implements BaseAdvisor {
             return this;
         }
 
+        public Builder traceSupport(LlmMessageTraceSupport traceSupport) {
+            this.traceSupport = traceSupport;
+            return this;
+        }
+
+        public Builder traceId(String traceId) {
+            this.traceId = traceId;
+            return this;
+        }
+
         public ReliableMessageChatMemoryAdvisor build() {
-            return new ReliableMessageChatMemoryAdvisor(this.chatMemory, this.conversationId, this.order, this.scheduler);
+            return new ReliableMessageChatMemoryAdvisor(
+                    this.chatMemory,
+                    this.conversationId,
+                    this.order,
+                    this.scheduler,
+                    this.traceSupport,
+                    this.traceId
+            );
         }
     }
 }

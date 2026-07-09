@@ -66,4 +66,26 @@ class DefaultConversationMemoryServiceTest {
 
         assertEquals(List.of("second", "third"), messages);
     }
+
+    @Test
+    void recentUserMessages_extractsOriginalQuestionFromRagPrompt() {
+        ChatMemoryRepository repository = mock(ChatMemoryRepository.class);
+        when(repository.findByConversationId("conv-1")).thenReturn(List.of(
+                new UserMessage("""
+                        请基于下面检索到的知识片段回答用户问题。
+
+                        用户问题：项目上党办会的要求是什么样子的？
+
+                        知识片段：
+                        [片段 1]
+                        这里是很长的召回内容
+                        """),
+                new AssistantMessage("assistant")
+        ));
+        DefaultConversationMemoryService service = new DefaultConversationMemoryService(repository);
+
+        List<String> messages = service.recentUserMessages("conv-1", 3);
+
+        assertEquals(List.of("项目上党办会的要求是什么样子的？"), messages);
+    }
 }

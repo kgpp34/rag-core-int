@@ -69,7 +69,7 @@ public class DefaultConversationMemoryService implements ConversationMemoryServi
             for (int index = history.size() - 1; index >= 0 && messages.size() < limit; index--) {
                 Message message = history.get(index);
                 if (message != null && message.getMessageType() == MessageType.USER) {
-                    String text = message.getText();
+                    String text = normalizeUserMessageForRewrite(message.getText());
                     if (text != null && !text.isBlank()) {
                         messages.add(text);
                     }
@@ -81,6 +81,25 @@ public class DefaultConversationMemoryService implements ConversationMemoryServi
             log.warn("[ChatMemory] 读取最近用户历史失败，query rewrite 将不使用历史, conversationId={}", conversationId, ex);
             return List.of();
         }
+    }
+
+    private static String normalizeUserMessageForRewrite(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        String normalized = text.trim();
+        String questionMarker = "用户问题：";
+        int questionStart = normalized.indexOf(questionMarker);
+        if (questionStart < 0) {
+            return normalized;
+        }
+        int valueStart = questionStart + questionMarker.length();
+        int chunksStart = normalized.indexOf("知识片段：", valueStart);
+        String question = chunksStart >= 0
+                ? normalized.substring(valueStart, chunksStart)
+                : normalized.substring(valueStart);
+        question = question.trim();
+        return question.isBlank() ? normalized : question;
     }
 
 }

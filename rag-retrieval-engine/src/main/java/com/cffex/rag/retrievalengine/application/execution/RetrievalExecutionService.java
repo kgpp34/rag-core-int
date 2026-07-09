@@ -116,6 +116,13 @@ public class RetrievalExecutionService {
                         "elapsedMs", embedMs,
                         "vector", debugTraceWriter.embeddingSummary(queryVector)
                 ));
+                debugTraceWriter.record("embedding.completed", Map.of(
+                        "model", embeddingModel.model(),
+                        "endpoint", embeddingModel.endpoint(),
+                        "inputLength", preprocessedQuery.text().length(),
+                        "elapsedMs", embedMs,
+                        "dimension", queryVector != null ? queryVector.length : 0
+                ));
             }
         } else if (debugTraceWriter.enabled()) {
             debugTraceWriter.record("embedding.skipped", Map.of(
@@ -321,6 +328,7 @@ public class RetrievalExecutionService {
             RagProcessEventPublisher eventPublisher
     ) {
         recordGlobalRerankRequest(candidates, rerankPolicy, rerankTopN);
+        long rerankStart = System.nanoTime();
         StageHandle handle = eventPublisher.start(RagProcessStage.RERANK, Map.of(
                 "scope", "global",
                 "inputCount", candidates.size()
@@ -337,11 +345,25 @@ public class RetrievalExecutionService {
                     rerankTopN,
                     rerankPolicy.scoreThresholdEnabled() ? rerankPolicy.scoreThreshold() : 0.0d
             );
+            long rerankMs = durationMs(rerankStart);
             eventPublisher.complete(handle, Map.of(
                     "scope", "global",
                     "inputCount", candidates.size(),
                     "outputCount", chunks.size()
             ));
+            if (debugTraceWriter.enabled()) {
+                Map<String, Object> payload = new LinkedHashMap<>();
+                payload.put("scope", "global");
+                payload.put("model", rerankPolicy.rerankPolicy().model());
+                payload.put("endpoint", rerankPolicy.rerankPolicy().endpoint());
+                payload.put("inputCount", candidates.size());
+                payload.put("outputCount", chunks.size());
+                payload.put("topK", rerankTopN);
+                payload.put("scoreThresholdEnabled", rerankPolicy.scoreThresholdEnabled());
+                payload.put("scoreThreshold", rerankPolicy.scoreThreshold());
+                payload.put("elapsedMs", rerankMs);
+                debugTraceWriter.record("global.rerank.completed", payload);
+            }
             recordGlobalRerankResponse(chunks);
             return chunks;
         } catch (RuntimeException ex) {

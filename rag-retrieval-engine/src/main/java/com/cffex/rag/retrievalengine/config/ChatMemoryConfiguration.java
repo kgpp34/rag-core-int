@@ -13,6 +13,8 @@ import com.cffex.rag.retrievalengine.infrastructure.chat.springai.ConversationSu
 import com.cffex.rag.retrievalengine.infrastructure.chat.springai.ConversationSummaryRepository;
 import com.cffex.rag.retrievalengine.infrastructure.chat.springai.ConversationSummaryService;
 import com.cffex.rag.retrievalengine.infrastructure.chat.springai.ChatMemoryAdvisorContributor;
+import com.cffex.rag.trace.application.TraceRecorder;
+import com.cffex.rag.trace.config.TraceProperties;
 
 @Configuration
 @ConditionalOnProperty(name = "rag.chat.memory-enabled", havingValue = "true")
@@ -23,8 +25,17 @@ public class ChatMemoryConfiguration {
             ChatMemoryRepository chatMemoryRepository,
             ConversationSummaryRepository summaryRepository,
             ConversationSummaryService summaryService,
-            ChatProperties properties) {
-        return new ChatMemoryAdvisorContributor(chatMemoryRepository, summaryRepository, summaryService, properties);
+            ChatProperties properties,
+            TraceRecorder traceRecorder,
+            TraceProperties traceProperties) {
+        return new ChatMemoryAdvisorContributor(
+                chatMemoryRepository,
+                summaryRepository,
+                summaryService,
+                properties,
+                traceRecorder,
+                traceProperties
+        );
     }
 
     @Bean(destroyMethod = "close")

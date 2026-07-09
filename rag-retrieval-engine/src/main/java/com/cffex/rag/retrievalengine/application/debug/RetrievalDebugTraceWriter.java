@@ -39,22 +39,28 @@ public class RetrievalDebugTraceWriter {
 
     private static final Logger log = LoggerFactory.getLogger(RetrievalDebugTraceWriter.class);
     private static final String SOURCE = "rag-core-int";
-    private static final Set<String> SUMMARY_TRACE_EVENTS = Set.of();
+    private static final Set<String> SUMMARY_TRACE_EVENTS = Set.of(
+            "embedding.completed",
+            "recall.multi_kb.completed",
+            "global.rerank.completed"
+    );
     private static final Set<String> DETAIL_TRACE_EVENTS = Set.of(
             "retrieval.request",
             "query.preprocess",
             "embedding.query",
+            "embedding.completed",
             "embedding.skipped",
             "recall.completed",
+            "recall.multi_kb.completed",
             "metadata.enrich.completed",
             "global.merge.before_rerank",
             "global.rerank.skipped",
             "global.rerank.request",
             "global.rerank.response",
+            "global.rerank.completed",
             "global.final",
             "retrieval.execution.completed",
             "kb.recall.started",
-            "kb.recall.completed",
             "kb.rerank.skipped",
             "kb.rerank.request",
             "kb.rerank.response",

@@ -502,6 +502,67 @@ class RagApiServiceTest {
     }
 
     @Test
+    void search_queryRewriteOmitsOriginalQueryWhenDependsOnHistory() {
+        ExecutionPlan executionPlan = sampleExecutionPlan(null);
+        when(queryPlannerFacade.plan(any(QueryPlanRequest.class))).thenReturn(executionPlan);
+        when(metadataQueryService.listModels(any())).thenReturn(List.of(
+                new ModelMeta("llm-default", "qwen-test", ModelType.LLM, "http://llm", "secret", true)
+        ));
+        when(metadataQueryService.listKnowledgeBases(any())).thenReturn(List.of(
+                new com.cffex.rag.common.domain.metadata.KnowledgeBaseMeta(
+                        "kb-1",
+                        com.cffex.rag.common.domain.metadata.RetrievalMode.HYBRID,
+                        "collection-1",
+                        true
+                )
+        ));
+        when(llmService.generate(any())).thenReturn(new LlmResponse("""
+                {
+                  "dependsOnHistory": true,
+                  "resolvedQuestion": "项目上党办会额度要求是什么？",
+                  "retrievalQueries": [
+                    "项目上党办会额度要求",
+                    "党办会 项目 额度 要求"
+                  ],
+                  "reason": "当前问题是追问"
+                }
+                """, "stop", Map.of()));
+        when(retrievalEngine.execute(any(RetrievalPlan.class))).thenAnswer(invocation -> {
+            RetrievalPlan plan = invocation.getArgument(0, RetrievalPlan.class);
+            return new RetrievalResult(
+                    "req-" + plan.query(),
+                    List.of(new RetrievedChunk(
+                            "chunk-" + plan.query(),
+                            "doc-1",
+                            "kb-1",
+                            0.9,
+                            0.2,
+                            0.8,
+                            "content " + plan.query(),
+                            Map.of()
+                    )),
+                    Map.of()
+            );
+        });
+
+        ragApiService.search(new ApiModels.QueryRequest(
+                "额度要求呢？",
+                List.of("doc-1"),
+                null,
+                null,
+                null,
+                new ApiModels.QueryRewriteConfig(true, "rewrite prompt")
+        ));
+
+        ArgumentCaptor<RetrievalPlan> planCaptor = ArgumentCaptor.forClass(RetrievalPlan.class);
+        verify(retrievalEngine, times(2)).execute(planCaptor.capture());
+        List<String> executedQueries = planCaptor.getAllValues().stream().map(RetrievalPlan::query).toList();
+        assertFalse(executedQueries.contains("额度要求呢？"));
+        assertTrue(executedQueries.contains("项目上党办会额度要求"));
+        assertTrue(executedQueries.contains("党办会 项目 额度 要求"));
+    }
+
+    @Test
     void answer_queryRewriteIncludesRecentUserHistoryWhenMemoryEnabled() {
         ExecutionPlan executionPlan = sampleExecutionPlan(null);
         when(queryPlannerFacade.plan(any(QueryPlanRequest.class))).thenReturn(executionPlan);

@@ -41,7 +41,9 @@ public class RetrievalTrace {
             int sparseTrimmed,
             int finalCount,
             boolean reranked,
-            long rerankMs
+            long rerankMs,
+            boolean scoreThresholdEnabled,
+            double scoreThreshold
     ) {}
 
     public void recordQueryPreprocessing(String originalQuery, String processedQuery) {
@@ -142,6 +144,9 @@ public class RetrievalTrace {
             kbLine.append(", sparseRaw=").append(kb.sparseRaw());
             kbLine.append(", sparseTrimmed=").append(kb.sparseTrimmed());
             kbLine.append(", final=").append(kb.finalCount());
+            if (kb.scoreThresholdEnabled()) {
+                kbLine.append(", scoreThreshold=").append(kb.scoreThreshold());
+            }
             if (kb.reranked()) {
                 kbLine.append(", rerankMs=").append(kb.rerankMs());
             }

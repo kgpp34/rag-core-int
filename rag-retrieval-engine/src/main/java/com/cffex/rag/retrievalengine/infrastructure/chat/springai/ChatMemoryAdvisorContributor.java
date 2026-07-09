@@ -2,6 +2,7 @@ package com.cffex.rag.retrievalengine.infrastructure.chat.springai;
 
 import java.util.List;
 
+import org.slf4j.MDC;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
@@ -12,6 +13,9 @@ import org.springframework.ai.tokenizer.TokenCountEstimator;
 
 import com.cffex.rag.retrievalengine.config.ChatProperties;
 import com.cffex.rag.retrievalengine.domain.model.ChatCompletionRequest;
+import com.cffex.rag.trace.application.NoOpTraceRecorder;
+import com.cffex.rag.trace.application.TraceRecorder;
+import com.cffex.rag.trace.config.TraceProperties;
 
 public class ChatMemoryAdvisorContributor implements ChatAdvisorContributor {
 
@@ -24,6 +28,7 @@ public class ChatMemoryAdvisorContributor implements ChatAdvisorContributor {
     private final ConversationSummaryService summaryService;
     private final ChatProperties properties;
     private final TokenCountEstimator tokenCountEstimator;
+    private final LlmMessageTraceSupport traceSupport;
 
     public ChatMemoryAdvisorContributor(
             ChatMemoryRepository chatMemoryRepository,
@@ -31,7 +36,34 @@ public class ChatMemoryAdvisorContributor implements ChatAdvisorContributor {
             ConversationSummaryService summaryService,
             ChatProperties properties
     ) {
-        this(chatMemoryRepository, summaryRepository, summaryService, properties, new JTokkitTokenCountEstimator());
+        this(
+                chatMemoryRepository,
+                summaryRepository,
+                summaryService,
+                properties,
+                new JTokkitTokenCountEstimator(),
+                new NoOpTraceRecorder(),
+                new TraceProperties()
+        );
+    }
+
+    public ChatMemoryAdvisorContributor(
+            ChatMemoryRepository chatMemoryRepository,
+            ConversationSummaryRepository summaryRepository,
+            ConversationSummaryService summaryService,
+            ChatProperties properties,
+            TraceRecorder traceRecorder,
+            TraceProperties traceProperties
+    ) {
+        this(
+                chatMemoryRepository,
+                summaryRepository,
+                summaryService,
+                properties,
+                new JTokkitTokenCountEstimator(),
+                traceRecorder,
+                traceProperties
+        );
     }
 
     ChatMemoryAdvisorContributor(
@@ -41,11 +73,32 @@ public class ChatMemoryAdvisorContributor implements ChatAdvisorContributor {
             ChatProperties properties,
             TokenCountEstimator tokenCountEstimator
     ) {
+        this(
+                chatMemoryRepository,
+                summaryRepository,
+                summaryService,
+                properties,
+                tokenCountEstimator,
+                new NoOpTraceRecorder(),
+                new TraceProperties()
+        );
+    }
+
+    ChatMemoryAdvisorContributor(
+            ChatMemoryRepository chatMemoryRepository,
+            ConversationSummaryRepository summaryRepository,
+            ConversationSummaryService summaryService,
+            ChatProperties properties,
+            TokenCountEstimator tokenCountEstimator,
+            TraceRecorder traceRecorder,
+            TraceProperties traceProperties
+    ) {
         this.chatMemoryRepository = chatMemoryRepository;
         this.summaryRepository = summaryRepository;
         this.summaryService = summaryService;
         this.properties = properties;
         this.tokenCountEstimator = tokenCountEstimator;
+        this.traceSupport = new LlmMessageTraceSupport(traceRecorder, traceProperties);
     }
 
     @Override
@@ -90,6 +143,8 @@ public class ChatMemoryAdvisorContributor implements ChatAdvisorContributor {
 
             return List.of(ReliableMessageChatMemoryAdvisor.builder(memory)
                     .conversationId(effectiveConversationId)
+                    .traceSupport(traceSupport)
+                    .traceId(MDC.get("traceId"))
                     .build());
         } catch (Exception ex) {
             log.warn("[ChatMemory] 对话记忆 Advisor 创建失败，降级为无记忆模式，userId={}", request.userId(), ex);

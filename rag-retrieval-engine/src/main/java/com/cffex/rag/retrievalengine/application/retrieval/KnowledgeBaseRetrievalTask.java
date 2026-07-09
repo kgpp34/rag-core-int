@@ -191,24 +191,11 @@ public class KnowledgeBaseRetrievalTask {
                     sparseTrimmed.size(),
                     finalCandidates.size(),
                     didRerank.get(),
-                    rerankMs
+                    rerankMs,
+                    policy.scoreThresholdEnabled(),
+                    policy.scoreThreshold()
             ));
         }
-        if (debugTraceWriter.enabled()) {
-            debugTraceWriter.record("kb.recall.completed", Map.of(
-                    "knowledgeBaseId", spec.knowledgeBaseId(),
-                    "retrievalMode", spec.retrievalMode().name(),
-                    "elapsedMs", taskMs,
-                    "denseRaw", dense.size(),
-                    "denseFiltered", denseFiltered.size(),
-                    "sparseRaw", sparse.size(),
-                    "sparseTrimmed", sparseTrimmed.size(),
-                    "finalCount", finalCandidates.size(),
-                    "reranked", didRerank.get(),
-                    "rerankMs", rerankMs
-            ));
-        }
-
         return finalCandidates;
     }
 

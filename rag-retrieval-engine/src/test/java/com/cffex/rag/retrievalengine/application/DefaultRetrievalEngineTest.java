@@ -140,9 +140,9 @@ class DefaultRetrievalEngineTest {
                 chunk("chunk-3", "kb-final-1", 0.73)
         );
         List<RetrievedChunk> reranked = List.of(
-                chunk("chunk-3", "kb-final-1", "最终知识库一", 0.99),
-                chunk("chunk-2", "kb-final-2", "最终知识库二", 0.88),
-                chunk("chunk-4", "kb-final-1", "最终知识库一", 0.77)
+                chunk("chunk-3", "kb-final-1", "最终知识库一", "doc-a", "文档A.pdf", 0.99),
+                chunk("chunk-2", "kb-final-2", "最终知识库二", "doc-b", "文档B.pdf", 0.88),
+                chunk("chunk-4", "kb-final-1", "最终知识库一", "doc-a", "文档A.pdf", 0.77)
         );
         RecordingPublisher publisher = new RecordingPublisher();
         when(rerankRankingService.rank(any(), any(), any(), anyInt())).thenReturn(reranked);
@@ -154,11 +154,25 @@ class DefaultRetrievalEngineTest {
                 .containsEntry("scope", "rewrite_merge")
                 .containsEntry("inputCount", 3)
                 .containsEntry("outputCount", 3)
-                .containsEntry("knowledgeBaseCount", 2)
-                .containsEntry("knowledgeBases", List.of(
-                        Map.of("knowledgeBaseId", "kb-final-1", "name", "最终知识库一"),
-                        Map.of("knowledgeBaseId", "kb-final-2", "name", "最终知识库二")
-                ));
+                .containsEntry("knowledgeBaseCount", 2);
+        assertThat(publisher.completedDetails.get("knowledgeBases")).isEqualTo(List.of(
+                Map.of(
+                        "knowledgeBaseId", "kb-final-1",
+                        "name", "最终知识库一",
+                        "documents", List.of(Map.of(
+                                "documentId", "doc-a",
+                                "documentName", "文档A.pdf"
+                        ))
+                ),
+                Map.of(
+                        "knowledgeBaseId", "kb-final-2",
+                        "name", "最终知识库二",
+                        "documents", List.of(Map.of(
+                                "documentId", "doc-b",
+                                "documentName", "文档B.pdf"
+                        ))
+                )
+        ));
     }
 
     private DefaultRetrievalEngine engine() {
@@ -229,17 +243,22 @@ class DefaultRetrievalEngineTest {
             String chunkId,
             String knowledgeBaseId,
             String knowledgeBaseName,
+            String documentId,
+            String documentName,
             double rankingScore
     ) {
         return new RetrievedChunk(
                 chunkId,
-                "doc-" + chunkId,
+                documentId,
                 knowledgeBaseId,
                 rankingScore,
                 null,
                 rankingScore,
                 "content " + chunkId,
-                Map.of("knowledgeBaseName", knowledgeBaseName)
+                Map.of(
+                        "knowledgeBaseName", knowledgeBaseName,
+                        "document_name", documentName
+                )
         );
     }
 
