@@ -81,6 +81,52 @@ class StandardRetrievalPlannerTest {
     }
 
     @Test
+    void plan_rejectsRequestedModeUnsupportedByKnowledgeBase() {
+        when(metadataQueryService.listKnowledgeBases(any())).thenReturn(List.of(
+                new KnowledgeBaseMeta("kb-1", RetrievalMode.SEMANTIC, "collection-1", true)
+        ));
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                planner.plan(new QueryPlanRequest(
+                        "hello",
+                        List.of("doc-1"),
+                        null,
+                        null,
+                        RetrievalMode.FULL_TEXT
+                )));
+
+        org.junit.jupiter.api.Assertions.assertNotNull(exception.getMessage());
+    }
+
+    @Test
+    void plan_allowsRequestingSubsetOfHybridKnowledgeBaseCapabilities() {
+        when(metadataQueryService.listKnowledgeBases(any())).thenReturn(List.of(
+                new KnowledgeBaseMeta("kb-1", RetrievalMode.HYBRID, "collection-1", true)
+        ));
+        when(metadataQueryService.listModels(any())).thenAnswer(invocation -> {
+            Object arg = invocation.getArgument(0);
+            String text = String.valueOf(arg);
+            if (text.contains("EMBEDDING")) {
+                return List.of(new ModelMeta("embed-default", "embed", ModelType.EMBEDDING, "http://embed", "k", true));
+            }
+            if (text.contains("RERANK")) {
+                return List.of(new ModelMeta("rerank-default", "rerank", ModelType.RERANK, "http://rerank", "k", true));
+            }
+            return List.of();
+        });
+
+        ExecutionPlan plan = planner.plan(new QueryPlanRequest(
+                "hello",
+                List.of("doc-1"),
+                null,
+                null,
+                RetrievalMode.FULL_TEXT
+        ));
+
+        assertEquals(RetrievalMode.FULL_TEXT, plan.primaryRetrievalPlan().recallSpecs().get(0).retrievalMode());
+    }
+
+    @Test
     void plan_failsWhenKnowledgeBasesEmpty() {
         when(metadataQueryService.listKnowledgeBases(any())).thenReturn(List.of());
 

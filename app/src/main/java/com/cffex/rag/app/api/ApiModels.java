@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.cffex.rag.common.domain.query.PlanType;
+import com.cffex.rag.common.domain.metadata.RetrievalMode;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
@@ -49,6 +50,8 @@ public final class ApiModels {
             List<String> docIds,
             @Schema(description = "检索方案类型")
             PlanType planType,
+            @Schema(description = "请求级检索模式；不传时使用知识库默认模式", example = "HYBRID")
+            RetrievalMode retrievalMode,
             @Schema(description = "覆盖默认 system prompt")
             String systemPrompt,
             RetrievalTuning retrievalTuning,
@@ -58,9 +61,20 @@ public final class ApiModels {
                 String query,
                 List<String> docIds,
                 PlanType planType,
+                String systemPrompt,
+                RetrievalTuning retrievalTuning,
+                QueryRewriteConfig queryRewrite
+        ) {
+            this(query, docIds, planType, null, systemPrompt, retrievalTuning, queryRewrite);
+        }
+
+        public QueryRequest(
+                String query,
+                List<String> docIds,
+                PlanType planType,
                 String systemPrompt
         ) {
-            this(query, docIds, planType, systemPrompt, null, null);
+            this(query, docIds, planType, null, systemPrompt, null, null);
         }
     }
 

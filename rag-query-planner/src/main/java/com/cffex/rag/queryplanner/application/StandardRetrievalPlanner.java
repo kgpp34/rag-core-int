@@ -64,6 +64,7 @@ class StandardRetrievalPlanner implements PlannerStrategy {
         }
 
         List<KnowledgeBaseMeta> knowledgeBases = resolveKnowledgeBases(request);
+        validateRequestedRetrievalMode(knowledgeBases, request.retrievalMode());
         ModelMeta embeddingModel = selectRequiredModel(ModelType.EMBEDDING, properties.getDefaults().getEmbeddingModelId());
         Optional<ModelMeta> rerankModel = selectOptionalModel(ModelType.RERANK, properties.getDefaults().getRerankModelId());
 
@@ -73,6 +74,7 @@ class StandardRetrievalPlanner implements PlannerStrategy {
                 request.docIds(),
                 embeddingModel,
                 rerankModel,
+                request.retrievalMode(),
                 requirePositive(properties.getDefaults().getTopK(), "query-planner.defaults.top-k"),
                 false,
                 DISABLED_GLOBAL_SCORE_THRESHOLD
@@ -103,6 +105,7 @@ class StandardRetrievalPlanner implements PlannerStrategy {
                 context.targetDocIds(),
                 embeddingModel,
                 rerankModel,
+                null,
                 context.topK() > 0
                         ? context.topK()
                         : requirePositive(properties.getDefaults().getTopK(), "query-planner.defaults.top-k"),
@@ -124,6 +127,7 @@ class StandardRetrievalPlanner implements PlannerStrategy {
             List<String> docIds,
             ModelMeta embeddingModel,
             Optional<ModelMeta> rerankModel,
+            RetrievalMode requestedRetrievalMode,
             int topK,
             boolean requestedScoreThresholdEnabled,
             double requestedScoreThreshold
@@ -134,6 +138,7 @@ class StandardRetrievalPlanner implements PlannerStrategy {
         List<KnowledgeBaseRecallSpec> recallSpecs = knowledgeBases.stream()
                 .filter(kb -> docIds.isEmpty() || docIdsByKnowledgeBase.containsKey(kb.knowledgeBaseId()))
                 .map(kb -> {
+                    RetrievalMode retrievalMode = resolveRetrievalMode(kb, requestedRetrievalMode);
                     int recallTopK = resolveKnowledgeBaseRecallTopK(kb.topK());
                     List<String> knowledgeBaseDocIds = docIds.isEmpty()
                             ? List.of()
@@ -141,8 +146,8 @@ class StandardRetrievalPlanner implements PlannerStrategy {
                     return new KnowledgeBaseRecallSpec(
                             kb.knowledgeBaseId(),
                             kb.collectionName(),
-                            kb.retrievalMode(),
-                            resolveBindings(kb),
+                            retrievalMode,
+                            resolveBindings(kb, retrievalMode),
                             knowledgeBaseDocIds,
                             recallTopK,
                             recallTopK,
@@ -283,7 +288,37 @@ class StandardRetrievalPlanner implements PlannerStrategy {
                 .orElse(null);
     }
 
-    private List<RetrievalBinding> resolveBindings(KnowledgeBaseMeta knowledgeBase) {
+    private RetrievalMode resolveRetrievalMode(
+            KnowledgeBaseMeta knowledgeBase,
+            RetrievalMode requestedRetrievalMode
+    ) {
+        RetrievalMode effectiveMode = requestedRetrievalMode == null
+                ? knowledgeBase.retrievalMode()
+                : requestedRetrievalMode;
+        if (!supports(knowledgeBase.retrievalMode(), effectiveMode)) {
+            throw new IllegalArgumentException(
+                    "knowledge base does not support requested retrieval mode, knowledgeBaseId=%s, "
+                            + "supportedMode=%s, requestedMode=%s"
+                            .formatted(knowledgeBase.knowledgeBaseId(), knowledgeBase.retrievalMode(), effectiveMode)
+            );
+        }
+        return effectiveMode;
+    }
+
+    private void validateRequestedRetrievalMode(
+            List<KnowledgeBaseMeta> knowledgeBases,
+            RetrievalMode requestedRetrievalMode
+    ) {
+        if (requestedRetrievalMode == null) {
+            return;
+        }
+        knowledgeBases.forEach(knowledgeBase -> resolveRetrievalMode(knowledgeBase, requestedRetrievalMode));
+    }
+
+    private List<RetrievalBinding> resolveBindings(
+            KnowledgeBaseMeta knowledgeBase,
+            RetrievalMode retrievalMode
+    ) {
         List<RetrievalBinding> bindings = knowledgeBase.bindings().stream()
                 .filter(com.cffex.rag.common.domain.metadata.RetrievalBindingMeta::enabled)
                 .map(binding -> new RetrievalBinding(
@@ -294,20 +329,24 @@ class StandardRetrievalPlanner implements PlannerStrategy {
                 ))
                 .toList();
 
-        for (RetrievalCapability capability : requiredCapabilities(knowledgeBase.retrievalMode())) {
+        for (RetrievalCapability capability : requiredCapabilities(retrievalMode)) {
             boolean present = bindings.stream().anyMatch(binding -> binding.capability() == capability);
             if (!present) {
                 throw new IllegalStateException(
                         "knowledge base missing required binding, knowledgeBaseId=%s, mode=%s, capability=%s"
                                 .formatted(
                                         knowledgeBase.knowledgeBaseId(),
-                                        knowledgeBase.retrievalMode(),
+                                        retrievalMode,
                                         capability
                                 )
                 );
             }
         }
         return bindings;
+    }
+
+    private boolean supports(RetrievalMode supportedMode, RetrievalMode requestedMode) {
+        return requiredCapabilities(supportedMode).containsAll(requiredCapabilities(requestedMode));
     }
 
     private List<RetrievalCapability> requiredCapabilities(RetrievalMode retrievalMode) {

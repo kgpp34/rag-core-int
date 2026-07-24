@@ -337,7 +337,8 @@ public class RagApiService {
                 request.query(),
                 safeList(request.docIds()),
                 request.planType(),
-                request.systemPrompt()
+                request.systemPrompt(),
+                request.retrievalMode()
         );
     }
 
