@@ -5,7 +5,7 @@
 
     <groupId>com.cffex.rag</groupId>
     <artifactId>rag-core-int</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.2.9-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>rag-core-int</name>
     <description>High-performance Java RAG retrieval core engine</description>

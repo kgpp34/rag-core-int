@@ -75,6 +75,7 @@ class StandardRetrievalPlanner implements PlannerStrategy {
                 embeddingModel,
                 rerankModel,
                 request.retrievalMode(),
+                true,
                 requirePositive(properties.getDefaults().getTopK(), "query-planner.defaults.top-k"),
                 false,
                 DISABLED_GLOBAL_SCORE_THRESHOLD
@@ -94,10 +95,12 @@ class StandardRetrievalPlanner implements PlannerStrategy {
                 ModelType.EMBEDDING,
                 firstNonBlank(context.embeddingModelId(), properties.getDefaults().getEmbeddingModelId())
         );
-        Optional<ModelMeta> rerankModel = selectOptionalModel(
-                ModelType.RERANK,
-                firstNonBlank(context.rerankModelId(), properties.getDefaults().getRerankModelId())
-        );
+        Optional<ModelMeta> rerankModel = context.rerankEnabled()
+                ? selectOptionalModel(
+                        ModelType.RERANK,
+                        firstNonBlank(context.rerankModelId(), properties.getDefaults().getRerankModelId())
+                )
+                : Optional.empty();
 
         RetrievalPlan retrievalPlan = buildPlan(
                 context.query(),
@@ -105,7 +108,8 @@ class StandardRetrievalPlanner implements PlannerStrategy {
                 context.targetDocIds(),
                 embeddingModel,
                 rerankModel,
-                null,
+                context.retrievalMode(),
+                context.rerankEnabled(),
                 context.topK() > 0
                         ? context.topK()
                         : requirePositive(properties.getDefaults().getTopK(), "query-planner.defaults.top-k"),
@@ -128,6 +132,7 @@ class StandardRetrievalPlanner implements PlannerStrategy {
             ModelMeta embeddingModel,
             Optional<ModelMeta> rerankModel,
             RetrievalMode requestedRetrievalMode,
+            boolean rerankEnabled,
             int topK,
             boolean requestedScoreThresholdEnabled,
             double requestedScoreThreshold
@@ -140,6 +145,7 @@ class StandardRetrievalPlanner implements PlannerStrategy {
                 .map(kb -> {
                     RetrievalMode retrievalMode = resolveRetrievalMode(kb, requestedRetrievalMode);
                     int recallTopK = resolveKnowledgeBaseRecallTopK(kb.topK());
+                    boolean knowledgeBaseRerankEnabled = rerankEnabled && kb.rerankingEnabled();
                     List<String> knowledgeBaseDocIds = docIds.isEmpty()
                             ? List.of()
                             : docIdsByKnowledgeBase.getOrDefault(kb.knowledgeBaseId(), List.of());
@@ -151,12 +157,12 @@ class StandardRetrievalPlanner implements PlannerStrategy {
                             knowledgeBaseDocIds,
                             recallTopK,
                             recallTopK,
-                            kb.rerankingEnabled(),
+                            knowledgeBaseRerankEnabled,
                             kb.scoreThresholdEnabled(),
                             kb.scoreThreshold(),
                             kb.vectorWeight(),
                             kb.keywordWeight(),
-                            buildKnowledgeBaseRerankSpec(kb, rerankModel)
+                            buildKnowledgeBaseRerankSpec(knowledgeBaseRerankEnabled, rerankModel)
                     );
                 })
                 .toList();
@@ -277,10 +283,10 @@ class StandardRetrievalPlanner implements PlannerStrategy {
     }
 
     private RankingSpec.RerankRankingSpec buildKnowledgeBaseRerankSpec(
-            KnowledgeBaseMeta knowledgeBase,
+            boolean rerankingEnabled,
             Optional<ModelMeta> rerankModel
     ) {
-        if (!knowledgeBase.rerankingEnabled()) {
+        if (!rerankingEnabled) {
             return null;
         }
         return rerankModel

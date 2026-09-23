@@ -3,6 +3,7 @@ package com.cffex.rag.app.api;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import com.cffex.rag.common.domain.query.PlanType;
 import com.cffex.rag.common.domain.metadata.RetrievalMode;
@@ -10,6 +11,8 @@ import com.cffex.rag.common.domain.metadata.RetrievalMode;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import com.fasterxml.jackson.databind.JsonNode;
 
 public final class ApiModels {
 
@@ -23,8 +26,14 @@ public final class ApiModels {
             @Schema(description = "粗召回候选数", example = "20")
             Integer candidateK,
             @Schema(description = "分数阈值", example = "0.6")
-            Double scoreThreshold
-    ) {}
+            Double scoreThreshold,
+            @Schema(description = "是否允许执行 rerank；默认 true，false 时跳过单库和全局 rerank", example = "true", defaultValue = "true")
+            Boolean rerankEnabled
+    ) {
+        public RetrievalTuning(Integer topK, Integer candidateK, Double scoreThreshold) {
+            this(topK, candidateK, scoreThreshold, null);
+        }
+    }
 
     @Schema(description = "多轮对话记忆配置")
     public record MemoryConfig(
@@ -86,8 +95,8 @@ public final class ApiModels {
             @NotBlank
             @Schema(description = "用户标识", example = "user-001")
             String userId,
-            @NotEmpty
-            @Schema(description = "指定文档 ID 列表", example = "[\"doc-1\",\"doc-2\"]")
+            @NotNull
+            @Schema(description = "指定文档 ID 列表；空列表表示不限定文档范围", example = "[\"doc-1\",\"doc-2\"]")
             List<String> docIds,
             @Schema(description = "检索方案类型")
             PlanType planType,
@@ -134,7 +143,11 @@ public final class ApiModels {
             @Schema(description = "文件名", example = "程序化交易管理办法.pdf")
             String fileName,
             @Schema(description = "文件访问路径", example = "https://example.com/files/doc-1")
-            String path
+            String path,
+            @Schema(description = "文档 ID", example = "8f14e45f-ceea-467f-a1b2-3c4d5e6f7a8b")
+            String documentId,
+            @Schema(description = "文档所属数据集（知识库）名称", example = "业务规则库")
+            String datasetName
     ) {}
 
     @Schema(description = "RAG 问答响应")
@@ -144,8 +157,32 @@ public final class ApiModels {
             List<Reference> references
     ) {}
 
+    @Schema(description = "Agentic Run 持久化状态")
+    public record AgenticRunResponse(
+            UUID runId,
+            String requestId,
+            String conversationId,
+            String userId,
+            String status,
+            String query,
+            JsonNode output,
+            JsonNode error,
+            String memoryStatus,
+            int memoryAttempts,
+            String memoryError,
+            Instant createdAt,
+            Instant updatedAt,
+            Instant completedAt
+    ) {}
+
     @Schema(description = "流式增量内容")
     public record RagAnswerStreamDelta(String content) {}
+
+    @Schema(description = "参考资料事件，通过独立的 reference 事件下发")
+    public record RagReferenceEvent(
+            @Schema(description = "参考资料列表")
+            List<Reference> references
+    ) {}
 
     @Schema(description = "RAG 流程进度事件")
     public record RagProgressEvent(

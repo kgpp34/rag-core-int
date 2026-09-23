@@ -38,7 +38,9 @@ class DifyMetadataSourceTest {
                         "kb-1",
                         "document-a",
                         "{\"upload_file_id\":\"file-123\"}",
-                        "upload_files/tenant-a/storage-file.pdf"
+                        "upload_files/tenant-a/storage-file.pdf",
+                        "confluence",
+                        "https://confluence.example.com/pages/123"
                 )
         ));
         FakeProviderModelMapper providerModelMapper = new FakeProviderModelMapper(List.of(
@@ -66,6 +68,9 @@ class DifyMetadataSourceTest {
         assertEquals("document-a", payload.documentMetasById().get("doc-1").name());
         assertEquals("file-123", payload.documentMetasById().get("doc-1").uploadFileId());
         assertEquals("upload_files/tenant-a/storage-file.pdf", payload.documentMetasById().get("doc-1").uploadFileKey());
+        assertEquals("confluence", payload.documentMetasById().get("doc-1").sourceType());
+        assertEquals("https://confluence.example.com/pages/123",
+                payload.documentMetasById().get("doc-1").referenceUrl());
         assertEquals(15, payload.knowledgeBasesById().get("kb-1").topK());
         assertEquals("知识库一", payload.knowledgeBasesById().get("kb-1").name());
         assertEquals(true, payload.knowledgeBasesById().get("kb-1").rerankingEnabled());

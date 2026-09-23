@@ -16,6 +16,7 @@ import org.springframework.ai.chat.client.advisor.api.BaseAdvisor;
 import org.springframework.ai.chat.client.advisor.api.StreamAdvisorChain;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.util.Assert;
 
@@ -79,8 +80,7 @@ public class ReliableMessageChatMemoryAdvisor implements BaseAdvisor {
 
         List<Message> memoryMessages = new ArrayList<>(this.chatMemory.get(conversationId));
         List<Message> currentInstructions = chatClientRequest.prompt().getInstructions();
-        List<Message> messages = new ArrayList<>(memoryMessages);
-        messages.addAll(currentInstructions);
+        List<Message> messages = orderMessages(memoryMessages, currentInstructions);
         ChatClientRequest requestWithMemory = chatClientRequest.mutate()
                 .prompt(chatClientRequest.prompt().mutate().messages(messages).build())
                 .build();
@@ -94,6 +94,36 @@ public class ReliableMessageChatMemoryAdvisor implements BaseAdvisor {
         log.debug("[ChatMemory] 已注入历史并写入用户消息, conversationId={}", conversationId);
 
         return requestWithMemory;
+    }
+
+    /**
+     * The model gateway used by this service requires system messages to be at
+     * the beginning of the prompt. Current instructions therefore take
+     * precedence over historical messages, while historical system messages
+     * (for example, a persisted conversation summary) are treated as context.
+     */
+    static List<Message> orderMessages(List<Message> memoryMessages, List<Message> currentInstructions) {
+        List<Message> messages = new ArrayList<>();
+        currentInstructions.stream()
+                .filter(Objects::nonNull)
+                .filter(message -> message.getMessageType() == MessageType.SYSTEM)
+                .forEach(messages::add);
+        memoryMessages.stream()
+                .filter(Objects::nonNull)
+                .map(ReliableMessageChatMemoryAdvisor::asHistoricalContext)
+                .forEach(messages::add);
+        currentInstructions.stream()
+                .filter(Objects::nonNull)
+                .filter(message -> message.getMessageType() != MessageType.SYSTEM)
+                .forEach(messages::add);
+        return List.copyOf(messages);
+    }
+
+    private static Message asHistoricalContext(Message message) {
+        if (message.getMessageType() != MessageType.SYSTEM) {
+            return message;
+        }
+        return new UserMessage("以下内容是历史上下文，仅供参考：\n" + Objects.toString(message.getText(), ""));
     }
 
     @Override

@@ -12,3 +12,4 @@ env
 logs/
 app/logs/
 *.tar
+dist/

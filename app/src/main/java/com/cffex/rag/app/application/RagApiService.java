@@ -2,6 +2,7 @@ package com.cffex.rag.app.application;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -13,6 +14,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
@@ -32,6 +34,7 @@ import com.cffex.rag.common.domain.llm.LlmRequest;
 import com.cffex.rag.common.domain.llm.LlmResponse;
 import com.cffex.rag.common.domain.llm.LlmStreamChunk;
 import com.cffex.rag.common.domain.memory.ConversationMemoryContext;
+import com.cffex.rag.common.domain.memory.ConversationMessage;
 import com.cffex.rag.common.domain.memory.ConversationMemoryRequest;
 import com.cffex.rag.common.domain.metadata.DocumentMeta;
 import com.cffex.rag.common.domain.metadata.KnowledgeBaseQueryCondition;
@@ -72,10 +75,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 @Service
 public class RagApiService {
 
+    private static final String CONFLUENCE_SOURCE_TYPE = "confluence";
+
     private static final Logger log = LoggerFactory.getLogger(RagApiService.class);
     private static final ObjectMapper QUERY_REWRITE_OBJECT_MAPPER = new ObjectMapper();
     private static final Set<String> SUMMARY_TRACE_EVENTS = Set.of(
             "rag.request.received",
+            "intent.classified",
+            "intent.direct_answer",
             "query_rewrite.summary",
             "retrieval.summary",
             "answer_generation.summary"
@@ -90,8 +97,11 @@ public class RagApiService {
     private final LlmService llmService;
     private final AppProperties appProperties;
     private final ConversationMemoryService conversationMemoryService;
+    private final AgenticRagClient agenticRagClient;
+    private final AgenticRunStore agenticRunStore;
     private final TraceRecorder traceRecorder;
     private final TraceProperties traceProperties;
+    private final QuestionIntentService questionIntentService;
 
     @Autowired
     public RagApiService(
@@ -102,7 +112,9 @@ public class RagApiService {
             AppProperties appProperties,
             ConversationMemoryService conversationMemoryService,
             TraceRecorder traceRecorder,
-            TraceProperties traceProperties
+            TraceProperties traceProperties,
+            AgenticRagClient agenticRagClient,
+            AgenticRunStore agenticRunStore
     ) {
         this.metadataQueryService = Objects.requireNonNull(metadataQueryService);
         this.queryPlannerFacade = Objects.requireNonNull(queryPlannerFacade);
@@ -110,8 +122,11 @@ public class RagApiService {
         this.llmService = Objects.requireNonNull(llmService);
         this.appProperties = Objects.requireNonNull(appProperties);
         this.conversationMemoryService = Objects.requireNonNull(conversationMemoryService);
+        this.agenticRagClient = Objects.requireNonNull(agenticRagClient);
+        this.agenticRunStore = Objects.requireNonNull(agenticRunStore);
         this.traceRecorder = Objects.requireNonNull(traceRecorder);
         this.traceProperties = Objects.requireNonNull(traceProperties);
+        this.questionIntentService = new QuestionIntentService(llmService, metadataQueryService, appProperties);
     }
 
     RagApiService(
@@ -130,7 +145,9 @@ public class RagApiService {
                 appProperties,
                 conversationMemoryService,
                 new NoOpTraceRecorder(),
-                new TraceProperties()
+                new TraceProperties(),
+                new DisabledAgenticRagClient(),
+                new DisabledAgenticRunStore()
         );
     }
 
@@ -178,7 +195,56 @@ public class RagApiService {
         }
     }
 
+    public ApiModels.AgenticRunResponse getAgenticRun(UUID runId) {
+        return agenticRunStore.findByRunId(runId)
+                .map(this::toAgenticRunResponse)
+                .orElseThrow(() -> new RagServiceException(
+                        RagErrorCode.AGENTIC_RUN_NOT_FOUND,
+                        "Agentic Run 不存在: " + runId
+                ));
+    }
+
+    public List<ApiModels.AgenticRunResponse> listAgenticRuns(String conversationId, int limit) {
+        String normalizedConversationId = normalizeStatic(conversationId);
+        if (normalizedConversationId == null) {
+            throw new RagServiceException(RagErrorCode.INVALID_REQUEST, "conversationId 不能为空");
+        }
+        if (limit < 1 || limit > 200) {
+            throw new RagServiceException(RagErrorCode.INVALID_REQUEST, "limit 必须在 1 到 200 之间");
+        }
+        return agenticRunStore.findByConversationId(normalizedConversationId, limit).stream()
+                .map(this::toAgenticRunResponse)
+                .toList();
+    }
+
+    private ApiModels.AgenticRunResponse toAgenticRunResponse(AgenticRun run) {
+        return new ApiModels.AgenticRunResponse(
+                run.runId(),
+                run.requestId(),
+                run.conversationId(),
+                run.userId(),
+                run.status(),
+                run.query(),
+                run.output(),
+                run.error(),
+                run.memoryStatus(),
+                run.memoryAttempts(),
+                run.memoryError(),
+                run.createdAt(),
+                run.updatedAt(),
+                run.completedAt()
+        );
+    }
+
     public ApiModels.RagAnswerResponse answer(ApiModels.RagAnswerRequest request) {
+        if (isCapabilityIntroduction(request)) {
+            String answer = capabilityIntroduction(request);
+            return new ApiModels.RagAnswerResponse(answer, List.of());
+        }
+        if (request.planType() == com.cffex.rag.common.domain.query.PlanType.AGENTIC_RAG) {
+            AgenticExecutionResult result = executeAgenticAnswer(request, event -> { }, false);
+            return new ApiModels.RagAnswerResponse(result.answer(), result.references());
+        }
         long start = System.nanoTime();
         recordTrace("request", "rag.request.received", requestReceivedPayload(
                 "answer",
@@ -221,6 +287,16 @@ public class RagApiService {
             ApiModels.RagAnswerRequest request,
             Consumer<StreamEvent> eventConsumer
     ) {
+        if (isCapabilityIntroduction(request)) {
+            String answer = capabilityIntroduction(request);
+            eventConsumer.accept(new StreamEvent("delta", new ApiModels.RagAnswerStreamDelta(answer)));
+            eventConsumer.accept(new StreamEvent("done", new ApiModels.RagAnswerStreamDone("stop", Map.of())));
+            return;
+        }
+        if (request.planType() == com.cffex.rag.common.domain.query.PlanType.AGENTIC_RAG) {
+            streamAgenticAnswer(request, eventConsumer);
+            return;
+        }
         long start = System.nanoTime();
         recordTrace("request", "rag.request.received", requestReceivedPayload(
                 "answer",
@@ -331,6 +407,377 @@ public class RagApiService {
         }
     }
 
+    private boolean isCapabilityIntroduction(ApiModels.RagAnswerRequest request) {
+        long start = System.nanoTime();
+        QuestionIntentService.Intent intent = questionIntentService.classify(
+                request.query(), () -> toEndpoint(resolveLlmModel(appProperties.getRag().getIntent().getModel())));
+        if (appProperties.getRag().getIntent().isEnabled()) {
+            recordTrace("intent", "intent.classified", Map.of("intent", intent.name(), "elapsedMs", durationMs(start)));
+        }
+        return intent == QuestionIntentService.Intent.CAPABILITY_INTRO;
+    }
+
+    private String capabilityIntroduction(ApiModels.RagAnswerRequest request) {
+        String answer = questionIntentService.introduction(safeList(request.docIds()));
+        ApiModels.MemoryConfig memory = request.memory();
+        if (memory != null) {
+            ConversationMemoryContext context = conversationMemoryService.resolve(new ConversationMemoryRequest(
+                    request.userId(), true, memory.conversationId()));
+            if (context.conversationId() != null) {
+                conversationMemoryService.appendExchange(context.conversationId(), request.query(), answer);
+            }
+        }
+        recordTrace("intent", "intent.direct_answer", Map.of("answerLength", answer.length()));
+        return answer;
+    }
+
+    private void streamAgenticAnswer(
+            ApiModels.RagAnswerRequest request,
+            Consumer<StreamEvent> eventConsumer
+    ) {
+        executeAgenticAnswer(request, eventConsumer, true);
+    }
+
+    private AgenticExecutionResult executeAgenticAnswer(
+            ApiModels.RagAnswerRequest request,
+            Consumer<StreamEvent> eventConsumer,
+            boolean stream
+    ) {
+        if (!appProperties.getRag().getAgentic().isEnabled()) {
+            throw new RagServiceException(RagErrorCode.PLAN_UNSUPPORTED, "Agentic RAG 未启用");
+        }
+        long start = System.nanoTime();
+        recordTrace("request", "rag.request.received", requestReceivedPayload(
+                "answer",
+                request.query(),
+                safeList(request.docIds()),
+                request.planType(),
+                queryRewriteEnabled(request),
+                request.memory() == null ? null : request.memory().conversationId(),
+                stream
+        ));
+        String requestId = MDC.get("traceId");
+        ApiModels.MemoryConfig memory = request.memory();
+        ConversationMemoryContext memoryContext = conversationMemoryService.resolve(new ConversationMemoryRequest(
+                request.userId(),
+                memory != null,
+                memory != null ? memory.conversationId() : null
+        ));
+        List<AgenticRagClient.AgenticMessage> messages = new ArrayList<>();
+        if (memoryContext.conversationId() != null) {
+            for (ConversationMessage message : conversationMemoryService.recentMessages(
+                    memoryContext.conversationId(),
+                    appProperties.getRag().getAgentic().getMemoryMessageLimit()
+            )) {
+                messages.add(new AgenticRagClient.AgenticMessage(message.role(), message.content()));
+            }
+        }
+        messages.add(new AgenticRagClient.AgenticMessage("user", request.query()));
+        UUID runId = agenticRagClient.createRun(List.copyOf(messages), safeList(request.docIds()), requestId);
+        log.info("Agentic Run 已创建，runId={}，requestId={}，conversationId={}，historyCount={}，stream={}",
+                runId, requestId, memoryContext.conversationId(), Math.max(0, messages.size() - 1), stream);
+        agenticRunStore.create(
+                runId,
+                requestId,
+                memoryContext.conversationId(),
+                memoryContext.userId(),
+                request.query()
+        );
+        StringBuilder streamedAnswer = new StringBuilder();
+        AtomicBoolean completed = new AtomicBoolean();
+        AtomicBoolean terminalSeen = new AtomicBoolean();
+        AtomicBoolean terminalRecorded = new AtomicBoolean();
+        AtomicLong progressSequence = new AtomicLong();
+        AtomicReference<AgenticExecutionResult> resultHolder = new AtomicReference<>();
+        AtomicReference<JsonNode> agenticReferences = new AtomicReference<>();
+        Consumer<AgenticRagClient.AgenticRunResult> completeRun = result -> {
+            if (completed.get()) {
+                return;
+            }
+            JsonNode output = result.output();
+            String finalAnswer = output != null
+                    ? output.path("answer").asText(streamedAnswer.toString())
+                    : streamedAnswer.toString();
+            agenticRunStore.markCompleted(runId, output);
+            terminalRecorded.set(true);
+            writeAgenticMemory(runId, memoryContext.conversationId(), request.query(), finalAnswer);
+            List<ApiModels.Reference> references = buildAgenticReferences(output, agenticReferences.get());
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("runId", runId.toString());
+            metadata.put("status", result.status());
+            metadata.put("references", references);
+            if (output != null && output.isObject()) {
+                metadata.put("citations", output.path("citations"));
+                metadata.put("partial", output.path("partial").asBoolean(false));
+                metadata.put("abstain", output.path("abstain").asBoolean(false));
+            }
+            eventConsumer.accept(new StreamEvent(
+                    "reference",
+                    new ApiModels.RagReferenceEvent(references)
+            ));
+            eventConsumer.accept(new StreamEvent(
+                    "done",
+                    new ApiModels.RagAnswerStreamDone("stop", metadata)
+            ));
+            resultHolder.set(new AgenticExecutionResult(
+                    runId,
+                    finalAnswer,
+                    references,
+                    output
+            ));
+            recordTrace("answer_generation", "agentic_run.completed", Map.of(
+                    "runId", runId.toString(),
+                    "answerLength", finalAnswer.length(),
+                    "referenceCount", references.size(),
+                    "partial", output != null && output.path("partial").asBoolean(false),
+                    "abstain", output != null && output.path("abstain").asBoolean(false),
+                    "elapsedMs", durationMs(start),
+                    "stream", stream
+            ));
+            log.info("Agentic Run 已完成，runId={}，answerLength={}，referenceCount={}，elapsedMs={}，stream={}",
+                    runId, finalAnswer.length(), references.size(), durationMs(start), stream);
+            completed.set(true);
+        };
+        try {
+            agenticRagClient.streamEvents(runId, event -> {
+                switch (event.eventType()) {
+                    case "answer.delta" -> {
+                        String delta = event.data().path("delta").asText("");
+                        if (!delta.isEmpty()) {
+                            streamedAnswer.append(delta);
+                            eventConsumer.accept(new StreamEvent(
+                                    "delta",
+                                    new ApiModels.RagAnswerStreamDelta(delta)
+                            ));
+                        }
+                    }
+                    case "answer.references" -> {
+                        // agentic-int 已经算好"正文实际引用到的来源"，这里只捕获，
+                        // 统一在 run.completed 时转换成 core 的 Reference 格式。
+                        agenticReferences.set(event.data());
+                    }
+                    case "run.completed" -> {
+                        terminalSeen.set(true);
+                        AgenticRagClient.AgenticRunResult result = agenticRagClient.getRun(runId, requestId);
+                        completeRun.accept(result);
+                    }
+                    case "run.failed" -> {
+                        terminalSeen.set(true);
+                        agenticRunStore.markFailed(runId, event.data());
+                        terminalRecorded.set(true);
+                        String message = event.data().path("message").asText("Agentic Run 执行失败");
+                        throw new RagServiceException(RagErrorCode.AGENTIC_RUN_FAILED, message);
+                    }
+                    case "run.cancelled" -> {
+                        terminalSeen.set(true);
+                        agenticRunStore.markCancelled(runId);
+                        terminalRecorded.set(true);
+                        throw new RagServiceException(RagErrorCode.AGENTIC_RUN_FAILED, "Agentic Run 已取消");
+                    }
+                    case "run.started" -> {
+                        agenticRunStore.markRunning(runId);
+                        eventConsumer.accept(new StreamEvent(
+                                "rag_progress",
+                                toAgenticProgressEvent(event, progressSequence.incrementAndGet())
+                        ));
+                    }
+                    default -> eventConsumer.accept(new StreamEvent(
+                            "rag_progress",
+                            toAgenticProgressEvent(event, progressSequence.incrementAndGet())
+                    ));
+                }
+            }, requestId);
+            if (!completed.get()) {
+                AgenticRagClient.AgenticRunResult result = agenticRagClient.getRun(runId, requestId);
+                String status = result.status() == null ? "" : result.status().toLowerCase(Locale.ROOT);
+                switch (status) {
+                    case "completed" -> {
+                        terminalSeen.set(true);
+                        log.warn("Agentic SSE 未收到 run.completed，使用运行状态兜底，runId={}，requestId={}",
+                                runId, requestId);
+                        completeRun.accept(result);
+                    }
+                    case "failed" -> {
+                        terminalSeen.set(true);
+                        agenticRunStore.markFailed(runId, result.error());
+                        terminalRecorded.set(true);
+                        String message = result.error() == null
+                                ? "Agentic Run 执行失败"
+                                : result.error().path("message").asText("Agentic Run 执行失败");
+                        throw new RagServiceException(RagErrorCode.AGENTIC_RUN_FAILED, message);
+                    }
+                    case "cancelled" -> {
+                        terminalSeen.set(true);
+                        agenticRunStore.markCancelled(runId);
+                        terminalRecorded.set(true);
+                        throw new RagServiceException(RagErrorCode.AGENTIC_RUN_FAILED, "Agentic Run 已取消");
+                    }
+                    default -> throw new RagServiceException(RagErrorCode.AGENTIC_PROTOCOL_ERROR,
+                            "Agentic SSE 在完成事件前结束，当前运行状态=" + status);
+                }
+            }
+        } catch (RuntimeException ex) {
+            if (!terminalSeen.get() && !terminalRecorded.get()
+                    && appProperties.getRag().getAgentic().isCancelOnDisconnect()) {
+                agenticRagClient.cancelRun(runId, requestId);
+            }
+            recordTrace("request", "rag.request.failed", Map.of(
+                    "endpointType", "answer",
+                    "runId", runId.toString(),
+                    "error", summarize(ex),
+                    "totalMs", durationMs(start),
+                    "stream", stream
+            ));
+            throw ex;
+        }
+        return resultHolder.get();
+    }
+
+    private void writeAgenticMemory(
+            UUID runId,
+            String conversationId,
+            String query,
+            String answer
+    ) {
+        if (conversationId == null || !agenticRunStore.claimMemoryWrite(runId, java.time.Instant.now())) {
+            return;
+        }
+        try {
+            conversationMemoryService.appendExchangeOnce(runId.toString(), conversationId, query, answer);
+            agenticRunStore.markMemoryWritten(runId);
+        } catch (RuntimeException ex) {
+            agenticRunStore.markMemoryWriteFailed(runId, summarize(ex));
+            throw ex;
+        }
+    }
+
+    /**
+     * 把 agentic-int 的 citations 转换成 core 的 {@link ApiModels.Reference}（文件级去重）。
+     *
+     * <p>当 agentic-int 提供了 {@code answer.references} 事件（正文实际引用到的来源）时，只保留
+     * 这些文档；事件缺失或内容被截断时回退为全部 citations，避免新老版本混布时丢引用。
+     * URL 与数据集名称仍由 core 自己生成，对外契约保持不变。
+     */
+    private List<ApiModels.Reference> buildAgenticReferences(JsonNode output, JsonNode agenticReferences) {
+        JsonNode citations = output == null ? null : output.path("citations");
+        if (citations == null || !citations.isArray() || citations.isEmpty()) {
+            return List.of();
+        }
+        Set<String> citedDocumentIds = citedDocumentIds(agenticReferences);
+        List<String> documentIds = new ArrayList<>();
+        citations.forEach(citation -> {
+            String documentId = normalizeStatic(citation.path("document_id").asText(null));
+            if (documentId == null || documentIds.contains(documentId)) {
+                return;
+            }
+            if (citedDocumentIds != null && !citedDocumentIds.contains(documentId)) {
+                return;
+            }
+            documentIds.add(documentId);
+        });
+        if (documentIds.isEmpty()) {
+            return List.of();
+        }
+        Map<String, DocumentMeta> documentMetas = metadataQueryService.getDocumentMetas(documentIds);
+        Map<String, String> datasetNames = resolveDatasetNames();
+        Map<String, ApiModels.Reference> references = new LinkedHashMap<>();
+        citations.forEach(citation -> {
+            String documentId = normalizeStatic(citation.path("document_id").asText(null));
+            if (citedDocumentIds != null && !citedDocumentIds.contains(documentId)) {
+                return;
+            }
+            DocumentMeta documentMeta = documentMetas.get(documentId);
+            JsonNode metadata = citation.path("metadata");
+            String fileName = firstNonBlank(
+                    firstNonBlank(jsonText(metadata, "document_name"), jsonText(metadata, "file_name")),
+                    documentMeta == null ? null : documentMeta.name()
+            );
+            if (fileName == null) {
+                return;
+            }
+            String uploadFileId = firstNonBlank(
+                    jsonText(metadata, "upload_file_id"),
+                    documentMeta == null ? null : documentMeta.uploadFileId()
+            );
+            String path = buildFilePath(
+                    appProperties.getRag().getDifyFilesUrl(),
+                    uploadFileId,
+                    documentMeta == null ? null : documentMeta.uploadFileKey(),
+                    fileName
+            );
+            path = resolveReferencePath(documentMeta, path);
+            String knowledgeBaseId = firstNonBlank(
+                    firstNonBlank(jsonText(metadata, "knowledge_base_id"), jsonText(citation, "knowledge_base_id")),
+                    documentMeta == null ? null : documentMeta.knowledgeBaseId()
+            );
+            String datasetName = datasetNameOrId(datasetNames, knowledgeBaseId);
+            references.putIfAbsent(
+                    documentId + '\u001f' + fileName,
+                    new ApiModels.Reference(fileName, path, documentId, datasetName)
+            );
+        });
+        return List.copyOf(references.values());
+    }
+
+    /**
+     * 读取 agentic-int {@code answer.references} 事件中"正文实际引用到的"文档集合。
+     *
+     * @return 需要保留的 documentId 集合；返回 {@code null} 表示不过滤（回退为全部 citations）
+     */
+    private static Set<String> citedDocumentIds(JsonNode agenticReferences) {
+        if (agenticReferences == null || agenticReferences.isNull()) {
+            return null;
+        }
+        if (agenticReferences.path("references_truncated").asBoolean(false)) {
+            return null;
+        }
+        JsonNode references = agenticReferences.path("references");
+        if (!references.isArray() || references.isEmpty()) {
+            return null;
+        }
+        Set<String> documentIds = new LinkedHashSet<>();
+        references.forEach(reference -> {
+            String documentId = normalizeStatic(reference.path("document_id").asText(null));
+            if (documentId != null) {
+                documentIds.add(documentId);
+            }
+        });
+        return documentIds.isEmpty() ? null : documentIds;
+    }
+
+    private static String jsonText(JsonNode node, String field) {
+        if (node == null || !node.isObject()) {
+            return null;
+        }
+        JsonNode value = node.get(field);
+        return value == null || value.isNull() ? null : normalizeStatic(value.asText());
+    }
+
+    private ApiModels.RagProgressEvent toAgenticProgressEvent(
+            AgenticRagClient.AgenticEvent event,
+            long sequence
+    ) {
+        String stage = event.data().path("stage").asText("agentic");
+        String status = event.data().path("status").asText("milestone");
+        String title = event.data().path("action").asText(event.eventType());
+        Long elapsedMs = event.data().has("duration_ms")
+                ? event.data().path("duration_ms").asLong()
+                : null;
+        Map<String, Object> details = new LinkedHashMap<>();
+        event.data().fields().forEachRemaining(entry -> details.put(entry.getKey(), entry.getValue()));
+        return new ApiModels.RagProgressEvent(
+                "agentic-" + (event.id() == null ? UUID.randomUUID() : event.id()),
+                sequence,
+                MDC.get("traceId"),
+                java.time.Instant.now(),
+                stage,
+                status,
+                title,
+                elapsedMs,
+                details
+        );
+    }
+
     /** 将检索 API 请求转换为查询规划请求。 */
     private QueryPlanRequest toQueryPlanRequest(ApiModels.QueryRequest request) {
         return new QueryPlanRequest(
@@ -353,8 +800,10 @@ public class RagApiService {
                 safeList(request.docIds()),
                 null,
                 null,
+                request.retrievalMode(),
                 positiveOrZero(tuningTopK(request)),
                 positiveOrZero(tuningCandidateK(request)),
+                !Boolean.FALSE.equals(tuningRerankEnabled(request)),
                 scoreThreshold != null,
                 scoreThreshold == null ? 0.0d : scoreThreshold,
                 Map.of(),
@@ -383,8 +832,10 @@ public class RagApiService {
                 safeList(request.docIds()),
                 null,
                 null,
+                null,
                 positiveOrZero(tuningTopK(request)),
                 positiveOrZero(tuningCandidateK(request)),
+                !Boolean.FALSE.equals(tuningRerankEnabled(request)),
                 scoreThreshold != null,
                 scoreThreshold == null ? 0.0d : scoreThreshold,
                 Map.of(),
@@ -409,6 +860,10 @@ public class RagApiService {
         return request.retrievalTuning() != null ? request.retrievalTuning().scoreThreshold() : null;
     }
 
+    private static Boolean tuningRerankEnabled(ApiModels.QueryRequest request) {
+        return request.retrievalTuning() != null ? request.retrievalTuning().rerankEnabled() : null;
+    }
+
     private static Integer tuningTopK(ApiModels.RagAnswerRequest request) {
         return request.retrievalTuning() != null ? request.retrievalTuning().topK() : null;
     }
@@ -419,6 +874,10 @@ public class RagApiService {
 
     private static Double tuningScoreThreshold(ApiModels.RagAnswerRequest request) {
         return request.retrievalTuning() != null ? request.retrievalTuning().scoreThreshold() : null;
+    }
+
+    private static Boolean tuningRerankEnabled(ApiModels.RagAnswerRequest request) {
+        return request.retrievalTuning() != null ? request.retrievalTuning().rerankEnabled() : null;
     }
 
     private static Boolean queryRewriteEnabled(ApiModels.QueryRequest request) {
@@ -589,7 +1048,11 @@ public class RagApiService {
                 memoryContext.conversationId()
         );
         Map<String, DocumentMeta> documentMetas = resolveDocumentMetas(retrieval.chunks());
-        List<ReferenceSource> referenceSources = buildReferenceSources(retrieval.chunks(), documentMetas);
+        List<ReferenceSource> referenceSources = buildReferenceSources(
+                retrieval.chunks(),
+                documentMetas,
+                resolveDatasetNames()
+        );
         ModelMeta llmModel = resolveLlmModel(null);
         LlmRequest llmRequest = new LlmRequest(
                 toEndpoint(llmModel),
@@ -1313,11 +1776,17 @@ public class RagApiService {
     }
 
     private boolean shouldUseRetrievalContext(ApiModels.QueryRequest request) {
-        return tuningTopK(request) != null || tuningCandidateK(request) != null || tuningScoreThreshold(request) != null;
+        return tuningTopK(request) != null
+                || tuningCandidateK(request) != null
+                || tuningScoreThreshold(request) != null
+                || tuningRerankEnabled(request) != null;
     }
 
     private boolean shouldUseRetrievalContext(ApiModels.RagAnswerRequest request) {
-        return tuningTopK(request) != null || tuningCandidateK(request) != null || tuningScoreThreshold(request) != null;
+        return tuningTopK(request) != null
+                || tuningCandidateK(request) != null
+                || tuningScoreThreshold(request) != null
+                || tuningRerankEnabled(request) != null;
     }
 
     private ExecutionPlan preserveRequestPrompt(ExecutionPlan executionPlan, String requestSystemPrompt) {
@@ -1358,7 +1827,8 @@ public class RagApiService {
 
     private List<ReferenceSource> buildReferenceSources(
             List<RetrievedChunk> chunks,
-            Map<String, DocumentMeta> documentMetas
+            Map<String, DocumentMeta> documentMetas,
+            Map<String, String> datasetNames
     ) {
         String difyFilesUrl = appProperties.getRag().getDifyFilesUrl();
         Map<String, ReferenceSource> sources = new LinkedHashMap<>();
@@ -1375,16 +1845,59 @@ public class RagApiService {
             if (fileName == null) {
                 continue;
             }
-            String path = buildFilePath(difyFilesUrl, uploadFileId, uploadFileKey, fileName);
+            String defaultPath = buildFilePath(difyFilesUrl, uploadFileId, uploadFileKey, fileName);
+            String path = resolveReferencePath(documentMeta, defaultPath);
             String key = referenceSourceKey(chunk.documentId(), fileName, uploadFileId, path);
             sources.computeIfAbsent(key, ignored -> new ReferenceSource(
                     sources.size() + 1,
                     key,
                     fileName,
-                    path
+                    path,
+                    chunk.documentId(),
+                    resolveDatasetName(datasetNames, chunk, documentMeta)
             ));
         }
         return List.copyOf(sources.values());
+    }
+
+    /**
+     * 解析知识库（数据集）ID 到名称的映射，用于在引用信息中标注数据集名称。
+     */
+    private Map<String, String> resolveDatasetNames() {
+        try {
+            return metadataQueryService.listKnowledgeBases(KnowledgeBaseQueryCondition.all()).stream()
+                    .filter(knowledgeBase -> knowledgeBase.name() != null)
+                    .collect(java.util.stream.Collectors.toMap(
+                            KnowledgeBaseMeta::knowledgeBaseId,
+                            KnowledgeBaseMeta::name,
+                            (existing, ignored) -> existing,
+                            LinkedHashMap::new
+                    ));
+        } catch (RuntimeException ex) {
+            log.warn("解析数据集名称失败，引用信息将不携带 datasetName | error={}", summarize(ex));
+            return Map.of();
+        }
+    }
+
+    private String resolveDatasetName(
+            Map<String, String> datasetNames,
+            RetrievedChunk chunk,
+            DocumentMeta documentMeta
+    ) {
+        String knowledgeBaseId = firstNonBlank(
+                chunk.knowledgeBaseId(),
+                documentMeta == null ? null : documentMeta.knowledgeBaseId()
+        );
+        return datasetNameOrId(datasetNames, knowledgeBaseId);
+    }
+
+    /** 数据集名称缺失时退回数据集 ID，保证引用条目始终有可展示的来源标识。 */
+    private static String datasetNameOrId(Map<String, String> datasetNames, String knowledgeBaseId) {
+        if (knowledgeBaseId == null) {
+            return null;
+        }
+        String datasetName = datasetNames.get(knowledgeBaseId);
+        return datasetName == null || datasetName.isBlank() ? knowledgeBaseId : datasetName;
     }
 
     private ReferenceSource findReferenceSource(
@@ -1408,6 +1921,7 @@ public class RagApiService {
                 documentMeta == null ? null : documentMeta.uploadFileKey(),
                 fileName
         );
+        path = resolveReferencePath(documentMeta, path);
         String key = referenceSourceKey(chunk.documentId(), fileName, uploadFileId, path);
         return sources.stream()
                 .filter(source -> source.key().equals(key))
@@ -1552,11 +2066,27 @@ public class RagApiService {
             answerBuilder.append(visibleTail);
             eventConsumer.accept(new StreamEvent("delta", new ApiModels.RagAnswerStreamDelta(visibleTail)));
         }
-        String generatedReferenceSection = backendReferenceSection(answerBuilder.toString(), preparedAnswer.referenceSources());
-        if (!generatedReferenceSection.isEmpty()) {
-            answerBuilder.append(generatedReferenceSection);
-            eventConsumer.accept(new StreamEvent("delta", new ApiModels.RagAnswerStreamDelta(generatedReferenceSection)));
-        }
+        emitReferenceEvent(answerBuilder.toString(), preparedAnswer.referenceSources(), eventConsumer);
+    }
+
+    /**
+     * 以独立的 {@code reference} 事件下发参考资料，避免把参考资料混进 {@code delta} 正文。
+     *
+     * <p>载荷为 {@link ApiModels.RagReferenceEvent}，字段为 {@code fileName}、{@code path}、
+     * {@code documentId}、{@code datasetName}；答案为空或与问题无关时下发空列表。
+     */
+    private static void emitReferenceEvent(
+            String answer,
+            List<ReferenceSource> referenceSources,
+            Consumer<StreamEvent> eventConsumer
+    ) {
+        List<ApiModels.Reference> references = shouldOmitBackendReferences(answer)
+                ? List.of()
+                : referencesFromSources(referenceSources);
+        eventConsumer.accept(new StreamEvent(
+                "reference",
+                new ApiModels.RagReferenceEvent(references)
+        ));
     }
 
     private static Map<String, Object> answerGenerationDetails(
@@ -1644,55 +2174,21 @@ public class RagApiService {
         return answer == null || answer.isBlank() || answer.contains(UNRELATED_ANSWER_MESSAGE);
     }
 
-    private String backendReferenceSection(String answer, List<ReferenceSource> references) {
-        if (shouldOmitBackendReferences(answer)) {
-            return "";
-        }
-        if (references.isEmpty()) {
-            return "";
-        }
-        String lineSeparator = System.lineSeparator();
-        StringBuilder section = new StringBuilder(referenceSectionPrefix(answer, lineSeparator));
-        section.append("---")
-                .append(lineSeparator)
-                .append(lineSeparator)
-                .append("###### 参考资料");
-        boolean appended = false;
-        for (ReferenceSource reference : references) {
-            if (reference.path() == null) {
-                section.append(lineSeparator)
-                        .append('[').append(reference.index()).append("] 《")
-                        .append(reference.fileName()).append('》');
-            } else {
-                section.append(lineSeparator)
-                        .append('[').append(reference.index()).append("] [")
-                        .append(reference.fileName()).append("](")
-                        .append(reference.path()).append(')');
-            }
-            appended = true;
-        }
-        return appended ? section.toString() : "";
-    }
-
-    private static String referenceSectionPrefix(String answer, String lineSeparator) {
-        if (answer.endsWith(lineSeparator + lineSeparator)) {
-            return "";
-        }
-        if (answer.endsWith(lineSeparator)) {
-            return lineSeparator;
-        }
-        return lineSeparator + lineSeparator;
-    }
-
     private static List<ApiModels.Reference> referencesFromSources(List<ReferenceSource> sources) {
         return sources.stream()
-                .map(source -> new ApiModels.Reference(source.fileName(), source.path()))
+                .map(source -> new ApiModels.Reference(
+                        source.fileName(),
+                        source.path(),
+                        source.documentId(),
+                        source.datasetName()
+                ))
                 .toList();
     }
 
     private List<ApiModels.Reference> buildReferences(List<RetrievedChunk> chunks) {
         String difyFilesUrl = appProperties.getRag().getDifyFilesUrl();
         Map<String, DocumentMeta> documentMetas = resolveDocumentMetas(chunks);
+        Map<String, String> datasetNames = resolveDatasetNames();
         return chunks.stream()
                 .filter(chunk -> {
                     Map<String, Object> metadata = chunk.metadata();
@@ -1718,11 +2214,26 @@ public class RagApiService {
                             documentMeta == null ? null : documentMeta.uploadFileKey(),
                             fileName
                     );
-                    return new ApiModels.Reference(fileName, path);
+                    path = resolveReferencePath(documentMeta, path);
+                    return new ApiModels.Reference(
+                            fileName,
+                            path,
+                            chunk.documentId(),
+                            resolveDatasetName(datasetNames, chunk, documentMeta)
+                    );
                 })
                 .filter(reference -> reference.fileName() != null)
                 .distinct()
                 .toList();
+    }
+
+    private static String resolveReferencePath(DocumentMeta documentMeta, String defaultPath) {
+        if (documentMeta == null
+                || !CONFLUENCE_SOURCE_TYPE.equalsIgnoreCase(documentMeta.sourceType())
+                || documentMeta.referenceUrl() == null) {
+            return defaultPath;
+        }
+        return documentMeta.referenceUrl();
     }
 
     private String buildFilePath(String difyFilesUrl, String uploadFileId, String uploadFileKey, String fileName) {
@@ -1893,11 +2404,21 @@ public class RagApiService {
     ) {
     }
 
+    private record AgenticExecutionResult(
+            UUID runId,
+            String answer,
+            List<ApiModels.Reference> references,
+            JsonNode output
+    ) {
+    }
+
     private record ReferenceSource(
             int index,
             String key,
             String fileName,
-            String path
+            String path,
+            String documentId,
+            String datasetName
     ) {
     }
 

@@ -65,7 +65,12 @@ class RagControllerTest {
     void answer_routesToJsonEndpointWhenAcceptingApplicationJson() throws Exception {
         when(ragApiService.answer(any())).thenReturn(new ApiModels.RagAnswerResponse(
                 "整理后的答案",
-                List.of()
+                List.of(new ApiModels.Reference(
+                        "程序化交易管理办法.pdf",
+                        "https://example.com/files/doc-1",
+                        "doc-1",
+                        "业务规则库"
+                ))
         ));
 
         mockMvc.perform(post("/api/v1/rag/answer")
@@ -81,8 +86,27 @@ class RagControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.answer").value("整理后的答案"))
-                .andExpect(jsonPath("$.references").isArray());
+                .andExpect(jsonPath("$.references").isArray())
+                .andExpect(jsonPath("$.references[0].fileName").value("程序化交易管理办法.pdf"))
+                .andExpect(jsonPath("$.references[0].path").value("https://example.com/files/doc-1"))
+                .andExpect(jsonPath("$.references[0].documentId").value("doc-1"))
+                .andExpect(jsonPath("$.references[0].datasetName").value("业务规则库"));
 
+        verify(ragApiService).answer(any(ApiModels.RagAnswerRequest.class));
+    }
+
+    @Test
+    void answer_acceptsCapabilityQuestionWithoutSelectedDocuments() throws Exception {
+        when(ragApiService.answer(any())).thenReturn(new ApiModels.RagAnswerResponse("能力介绍", List.of()));
+        mockMvc.perform(post("/api/v1/rag/answer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"query":"你能干什么？","userId":"user-001","docIds":[]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.answer").value("能力介绍"))
+                .andExpect(jsonPath("$.references").isEmpty());
         verify(ragApiService).answer(any(ApiModels.RagAnswerRequest.class));
     }
 
@@ -104,6 +128,14 @@ class RagControllerTest {
             )));
             consumer.accept(new RagApiService.StreamEvent("delta", new ApiModels.RagAnswerStreamDelta("part-1")));
             consumer.accept(new RagApiService.StreamEvent("delta", new ApiModels.RagAnswerStreamDelta("part-2")));
+            consumer.accept(new RagApiService.StreamEvent("reference", new ApiModels.RagReferenceEvent(List.of(
+                    new ApiModels.Reference(
+                            "程序化交易管理办法.pdf",
+                            "https://example.com/files/doc-1",
+                            "doc-1",
+                            "业务规则库"
+                    )
+            ))));
             consumer.accept(new RagApiService.StreamEvent("done", new ApiModels.RagAnswerStreamDone(
                     "stop",
                     Map.of("llm_model_id", "llm-default")
@@ -130,9 +162,15 @@ class RagControllerTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM))
                 .andExpect(content().string(containsString("event:rag_progress")))
                 .andExpect(content().string(containsString("event:delta")))
+                .andExpect(content().string(containsString("event:reference")))
                 .andExpect(content().string(containsString("event:done")))
                 .andExpect(content().string(containsString("part-1")))
                 .andExpect(content().string(containsString("part-2")))
+                // 响应正文按 ISO-8859-1 解码，这里只校验 JSON 结构与英文字段名。
+                .andExpect(content().string(containsString("data:{\"references\":[{")))
+                .andExpect(content().string(containsString("\"path\":\"https://example.com/files/doc-1\"")))
+                .andExpect(content().string(containsString("\"documentId\":\"doc-1\"")))
+                .andExpect(content().string(containsString("\"datasetName\":\"")))
                 .andExpect(content().string(containsString("stop")));
 
         verify(ragApiService).streamAnswer(any(ApiModels.RagAnswerRequest.class), any());

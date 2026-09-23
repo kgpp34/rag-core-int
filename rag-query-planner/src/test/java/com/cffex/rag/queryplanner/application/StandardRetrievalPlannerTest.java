@@ -544,6 +544,50 @@ class StandardRetrievalPlannerTest {
     }
 
     @Test
+    void plan_contextDisablesKnowledgeBaseAndGlobalRerankWhenRequested() {
+        when(metadataQueryService.listKnowledgeBases(any())).thenReturn(List.of(
+                new KnowledgeBaseMeta("kb-1", RetrievalMode.HYBRID, "collection-1", true,
+                        5, true, false, 0.0d, 0.7d, 0.3d)
+        ));
+        when(metadataQueryService.listModels(any())).thenAnswer(invocation -> {
+            Object arg = invocation.getArgument(0);
+            String text = String.valueOf(arg);
+            if (text.contains("EMBEDDING")) {
+                return List.of(new ModelMeta(
+                        "embed-default", "embed-model", ModelType.EMBEDDING, "http://embed", "k", true));
+            }
+            if (text.contains("RERANK")) {
+                return List.of(new ModelMeta(
+                        "rerank-default", "rerank-model", ModelType.RERANK, "http://rerank", "k", true));
+            }
+            return List.of();
+        });
+
+        ExecutionPlan plan = planner.plan(new com.cffex.rag.common.domain.retrieval.RetrievalContext(
+                "tenant-1",
+                "hello",
+                List.of("kb-1"),
+                List.of("doc-1"),
+                "embed-default",
+                "rerank-default",
+                RetrievalMode.FULL_TEXT,
+                5,
+                20,
+                false,
+                false,
+                0.0d,
+                Map.of(),
+                Map.of()
+        ));
+
+        assertEquals(RankingSpec.WeightedRankingSpec.class,
+                plan.primaryRetrievalPlan().globalRankingSpec().getClass());
+        assertEquals(RetrievalMode.FULL_TEXT, plan.primaryRetrievalPlan().recallSpecs().get(0).retrievalMode());
+        assertEquals(false, plan.primaryRetrievalPlan().recallSpecs().get(0).rerankingEnabled());
+        assertEquals(false, plan.primaryRetrievalPlan().recallSpecs().get(0).hasRerankRankingSpec());
+    }
+
+    @Test
     void plan_groupsDocumentFiltersByKnowledgeBase() {
         when(metadataQueryService.listKnowledgeBases(any())).thenReturn(List.of(
                 new KnowledgeBaseMeta("kb-1", RetrievalMode.HYBRID, "collection-1", true),

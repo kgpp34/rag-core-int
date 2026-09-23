@@ -116,6 +116,28 @@ retrieval:
 app:
   rag:
     dify-files-url: http://172.31.71.71/download_files/
+    agentic:
+      enabled: ${RAG_AGENTIC_ENABLED:true}
+      base-url: ${RAG_AGENTIC_BASE_URL:http://rag-agentic-int.internal:8000}
+      auth-token: ${RAG_AGENTIC_AUTH_TOKEN:}
+      connect-timeout: ${RAG_AGENTIC_CONNECT_TIMEOUT:5s}
+      run-timeout: ${RAG_AGENTIC_RUN_TIMEOUT:5m}
+      cancel-on-disconnect: ${RAG_AGENTIC_CANCEL_ON_DISCONNECT:true}
+      memory-message-limit: ${RAG_AGENTIC_MEMORY_MESSAGE_LIMIT:20}
+      sse-max-reconnects: ${RAG_AGENTIC_SSE_MAX_RECONNECTS:2}
+      reconciliation-enabled: ${RAG_AGENTIC_RECONCILIATION_ENABLED:true}
+      reconciliation-fixed-delay: ${RAG_AGENTIC_RECONCILIATION_FIXED_DELAY:30s}
+      reconciliation-stale-after: ${RAG_AGENTIC_RECONCILIATION_STALE_AFTER:2m}
+      reconciliation-batch-size: ${RAG_AGENTIC_RECONCILIATION_BATCH_SIZE:50}
+      memory-max-attempts: ${RAG_AGENTIC_MEMORY_MAX_ATTEMPTS:5}
+    # 分类提示词与介绍模板默认定义在 AppProperties.Intent，可通过 intent.prompt / introduction 覆盖。
+    # introduction 模板中的 {knowledgeBases} 将替换为当前范围内缓存的知识库名称。
+    intent:
+      enabled: ${RAG_INTENT_ENABLED:true}
+      # 可选择轻量分类模型的名称或 ID；留空则使用默认问答模型。
+      model: ${RAG_INTENT_MODEL:}
+      timeout: ${RAG_INTENT_TIMEOUT:5s}
+      max-knowledge-base-names: ${RAG_INTENT_MAX_KNOWLEDGE_BASE_NAMES:10}
     answer:
       default-llm-model: your-llm-model-name
       default-temperature: 0.7

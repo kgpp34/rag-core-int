@@ -13,7 +13,9 @@ public interface DifyDocumentMapper {
                 d.dataset_id,
                 d.name,
                 d.data_source_info,
-                uf.key AS upload_file_key
+                uf.key AS upload_file_key,
+                d.doc_metadata::jsonb ->> 'source_type' AS source_type,
+                d.doc_metadata::jsonb ->> 'reference_url' AS reference_url
             FROM public.documents d
             LEFT JOIN public.upload_files uf
               ON uf.id::text = (d.data_source_info::jsonb ->> 'upload_file_id')
@@ -27,6 +29,8 @@ public interface DifyDocumentMapper {
             String datasetId,
             String name,
             String dataSourceInfo,
-            String uploadFileKey
+            String uploadFileKey,
+            String sourceType,
+            String referenceUrl
     ) {}
 }

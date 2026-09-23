@@ -9,6 +9,7 @@ services:
         # 默认使用已验证可拉取的 amd64 组合，优先保证跨架构构建成功。
         BUILDER_IMAGE: ${BUILDER_IMAGE:-maven:3.9.11-eclipse-temurin-25}
         RUNTIME_IMAGE: ${RUNTIME_IMAGE:-eclipse-temurin:25-jre}
+        APP_VERSION: ${APP_VERSION:-0.2.9}
     image: rag-core-int:test
     restart: unless-stopped
     ports:
@@ -35,6 +36,12 @@ services:
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-rag}
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-cffex1001!}
       SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+      # Agentic RAG 服务地址只配置协议、主机和端口，不要包含 /v1/runs。
+      RAG_AGENTIC_ENABLED: ${RAG_AGENTIC_ENABLED:-true}
+      RAG_AGENTIC_BASE_URL: ${RAG_AGENTIC_BASE_URL:-http://rag-agentic-int.internal:8000}
+      RAG_AGENTIC_AUTH_TOKEN: ${RAG_AGENTIC_AUTH_TOKEN:-}
+      RAG_AGENTIC_CONNECT_TIMEOUT: ${RAG_AGENTIC_CONNECT_TIMEOUT:-5s}
+      RAG_AGENTIC_RUN_TIMEOUT: ${RAG_AGENTIC_RUN_TIMEOUT:-5m}
       MILVUS_URI: ${MILVUS_URI:-http://host.docker.internal:19530}
       MILVUS_USERNAME: ${MILVUS_USERNAME:-root}
       MILVUS_PASSWORD: ${MILVUS_PASSWORD:-Milvus}

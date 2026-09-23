@@ -10,10 +10,54 @@ import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 
 class ReliableMessageChatMemoryAdvisorTest {
+
+    @Test
+    void orderMessages_putsCurrentSystemBeforeHistoricalMessages() {
+        List<Message> ordered = ReliableMessageChatMemoryAdvisor.orderMessages(
+                List.of(
+                        new UserMessage("历史问题"),
+                        new AssistantMessage("历史回答")
+                ),
+                List.of(
+                        new SystemMessage("当前系统提示词"),
+                        new UserMessage("当前问题")
+                )
+        );
+
+        assertThat(ordered)
+                .extracting(Message::getMessageType)
+                .containsExactly(
+                        org.springframework.ai.chat.messages.MessageType.SYSTEM,
+                        org.springframework.ai.chat.messages.MessageType.USER,
+                        org.springframework.ai.chat.messages.MessageType.ASSISTANT,
+                        org.springframework.ai.chat.messages.MessageType.USER
+                );
+        assertThat(ordered.get(0).getText()).isEqualTo("当前系统提示词");
+        assertThat(ordered.get(3).getText()).isEqualTo("当前问题");
+    }
+
+    @Test
+    void orderMessages_convertsHistoricalSystemMessagesToContext() {
+        List<Message> ordered = ReliableMessageChatMemoryAdvisor.orderMessages(
+                List.of(new SystemMessage("历史摘要")),
+                List.of(new SystemMessage("当前系统提示词"), new UserMessage("当前问题"))
+        );
+
+        assertThat(ordered)
+                .extracting(Message::getMessageType)
+                .containsExactly(
+                        org.springframework.ai.chat.messages.MessageType.SYSTEM,
+                        org.springframework.ai.chat.messages.MessageType.USER,
+                        org.springframework.ai.chat.messages.MessageType.USER
+                );
+        assertThat(ordered.get(1).getText()).contains("历史摘要");
+    }
 
     @Test
     void after_skipsAssistantMessagesWithNullContent() {

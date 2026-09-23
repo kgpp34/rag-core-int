@@ -1,5 +1,6 @@
 ARG BUILDER_IMAGE=maven:3.9.11-eclipse-temurin-25
 ARG RUNTIME_IMAGE=eclipse-temurin:25-jre
+ARG APP_VERSION=0.2.9
 
 FROM --platform=$BUILDPLATFORM ${BUILDER_IMAGE} AS builder
 
@@ -26,14 +27,21 @@ RUN mvn -pl app -am clean package -DskipTests
 
 FROM --platform=$BUILDPLATFORM ${RUNTIME_IMAGE} AS extractor
 
+ARG APP_VERSION
+
 WORKDIR /work
 
-COPY --from=builder /workspace/app/target/app-0.1.0-SNAPSHOT.jar /work/app.jar
+COPY --from=builder /workspace/app/target/app-${APP_VERSION}-SNAPSHOT.jar /work/app.jar
 
 RUN mkdir -p /layers \
     && java -Djarmode=layertools -jar /work/app.jar extract --destination /layers
 
 FROM ${RUNTIME_IMAGE}
+
+ARG APP_VERSION
+LABEL org.opencontainers.image.title="rag-core-int" \
+      org.opencontainers.image.version="$APP_VERSION" \
+      org.opencontainers.image.description="Internal RAG core service"
 
 WORKDIR /app
 

@@ -94,7 +94,9 @@ public class DifyMetadataSource implements MetadataSource {
                         row.datasetId(),
                         row.name(),
                         MetadataConverter.extractUploadFileId(row.dataSourceInfo()),
-                        row.uploadFileKey()
+                        row.uploadFileKey(),
+                        row.sourceType(),
+                        row.referenceUrl()
                 )
         );
         Map<String, String> documentToKnowledgeBase = documentMetasById.values().stream()

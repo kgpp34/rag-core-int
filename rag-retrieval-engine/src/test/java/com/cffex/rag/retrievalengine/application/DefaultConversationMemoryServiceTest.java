@@ -7,12 +7,14 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 
 import com.cffex.rag.common.domain.memory.ConversationMemoryContext;
+import com.cffex.rag.common.domain.memory.ConversationMessage;
 import com.cffex.rag.common.domain.memory.ConversationMemoryRequest;
 import com.cffex.rag.common.exception.RagErrorCode;
 import com.cffex.rag.common.exception.RagServiceException;
@@ -87,5 +89,37 @@ class DefaultConversationMemoryServiceTest {
         List<String> messages = service.recentUserMessages("conv-1", 3);
 
         assertEquals(List.of("项目上党办会的要求是什么样子的？"), messages);
+    }
+
+    @Test
+    void recentMessagesReturnsUserAndAssistantHistory() {
+        ChatMemoryRepository repository = mock(ChatMemoryRepository.class);
+        when(repository.findByConversationId("conv-1")).thenReturn(List.of(
+                new UserMessage("question"),
+                new AssistantMessage("answer")
+        ));
+        DefaultConversationMemoryService service = new DefaultConversationMemoryService(repository);
+
+        List<ConversationMessage> messages = service.recentMessages("conv-1", 10);
+
+        assertEquals(List.of(
+                new ConversationMessage("user", "question"),
+                new ConversationMessage("assistant", "answer")
+        ), messages);
+    }
+
+    @Test
+    void appendExchangePersistsCompleteHistory() {
+        ChatMemoryRepository repository = mock(ChatMemoryRepository.class);
+        when(repository.findByConversationId("conv-1")).thenReturn(List.of(new UserMessage("old question")));
+        DefaultConversationMemoryService service = new DefaultConversationMemoryService(repository);
+
+        service.appendExchange("conv-1", "new question", "new answer");
+
+        verify(repository).saveAll(org.mockito.ArgumentMatchers.eq("conv-1"), org.mockito.ArgumentMatchers.argThat(
+                messages -> messages.size() == 3
+                        && messages.get(1).getMessageType() == org.springframework.ai.chat.messages.MessageType.USER
+                        && messages.get(2).getMessageType() == org.springframework.ai.chat.messages.MessageType.ASSISTANT
+        ));
     }
 }

@@ -10,7 +10,7 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
-import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.tokenizer.TokenCountEstimator;
 
 import com.cffex.rag.retrievalengine.domain.model.ChatModelPolicy;
@@ -79,7 +79,7 @@ final class TokenBudgetChatMemory implements ChatMemory {
         int usedTokens = 0;
         int lowerBound = 0;
         if (summary != null && summary.content() != null && !summary.content().isBlank()) {
-            Message summaryMessage = new SystemMessage("以下是较早对话的摘要：\n" + summary.content());
+            Message summaryMessage = new UserMessage("以下是较早对话的摘要：\n" + summary.content());
             int summaryTokens = estimate(summaryMessage);
             if (summaryTokens <= maxTokens) {
                 selected.add(summaryMessage);

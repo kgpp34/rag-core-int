@@ -3,12 +3,17 @@ package com.cffex.rag.app.web;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Map;
+import java.util.List;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -152,6 +157,21 @@ public class RagController {
             )
             ApiModels.RagAnswerRequest request) {
         return ragApiService.answer(request);
+    }
+
+    @GetMapping(path = "/rag/agentic/runs/{runId}", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "查询 Agentic Run", description = "返回 core 持久化的 Run、结果及记忆写入状态。")
+    public ApiModels.AgenticRunResponse getAgenticRun(@PathVariable UUID runId) {
+        return ragApiService.getAgenticRun(runId);
+    }
+
+    @GetMapping(path = "/rag/agentic/runs", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "查询会话的 Agentic Runs", description = "按创建时间倒序返回指定会话的 Runs。")
+    public List<ApiModels.AgenticRunResponse> listAgenticRuns(
+            @RequestParam String conversationId,
+            @RequestParam(defaultValue = "50") int limit
+    ) {
+        return ragApiService.listAgenticRuns(conversationId, limit);
     }
 
     @PostMapping(

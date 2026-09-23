@@ -32,8 +32,11 @@ import com.cffex.rag.common.domain.llm.LlmStreamChunk;
 import com.cffex.rag.common.domain.memory.ConversationMemoryContext;
 import com.cffex.rag.common.domain.memory.ConversationMemoryRequest;
 import com.cffex.rag.common.domain.metadata.DocumentMeta;
+import com.cffex.rag.common.domain.metadata.KnowledgeBaseMeta;
+import com.cffex.rag.common.domain.metadata.KnowledgeBaseQueryCondition;
 import com.cffex.rag.common.domain.metadata.ModelMeta;
 import com.cffex.rag.common.domain.metadata.ModelType;
+import com.cffex.rag.common.domain.metadata.RetrievalMode;
 import com.cffex.rag.common.domain.query.ExecutionPlan;
 import com.cffex.rag.common.domain.query.QueryPlanRequest;
 import com.cffex.rag.common.domain.query.RetrievalPlan;
@@ -75,6 +78,7 @@ class RagApiServiceTest {
     @BeforeEach
     void setUp() {
         AppProperties appProperties = new AppProperties();
+        appProperties.getRag().getIntent().setEnabled(false);
         appProperties.getRag().getAnswer().setDefaultLlmModel("qwen-test");
         appProperties.getRag().getAnswer().setDefaultLlmModelId("llm-default");
         appProperties.getRag().getAnswer().setDefaultTemperature(0.2d);
@@ -155,6 +159,7 @@ class RagApiServiceTest {
     @Test
     void answer_fallsBackToLegacyModelIdConfiguration() {
         AppProperties appProperties = new AppProperties();
+        appProperties.getRag().getIntent().setEnabled(false);
         appProperties.getRag().getAnswer().setDefaultLlmModelId("llm-default");
         appProperties.getRag().getAnswer().setDefaultTemperature(0.2d);
         appProperties.getRag().getAnswer().setDefaultMaxTokens(4096);
@@ -239,8 +244,40 @@ class RagApiServiceTest {
         assertEquals(List.of("kb-1"), contextCaptor.getValue().targetKnowledgeBaseIds());
         assertEquals(8, contextCaptor.getValue().topK());
         assertEquals(20, contextCaptor.getValue().candidateK());
+        assertTrue(contextCaptor.getValue().rerankEnabled());
         assertEquals(true, contextCaptor.getValue().scoreThresholdEnabled());
         assertEquals(0.72d, contextCaptor.getValue().scoreThreshold());
+    }
+
+    @Test
+    void search_disablesRerankWhenOnlyRerankFlagIsFalse() {
+        ExecutionPlan executionPlan = sampleExecutionPlan(null);
+        when(queryPlannerFacade.plan(any(RetrievalContext.class))).thenReturn(executionPlan);
+        when(retrievalEngine.execute(executionPlan.primaryRetrievalPlan())).thenReturn(sampleRetrieval());
+        when(metadataQueryService.listKnowledgeBases(
+                any(com.cffex.rag.common.domain.metadata.KnowledgeBaseQueryCondition.class)))
+                .thenReturn(List.of(new com.cffex.rag.common.domain.metadata.KnowledgeBaseMeta(
+                        "kb-1",
+                        com.cffex.rag.common.domain.metadata.RetrievalMode.HYBRID,
+                        "collection-1",
+                        true
+                )));
+
+        ragApiService.search(new ApiModels.QueryRequest(
+                "hello",
+                List.of("doc-1"),
+                com.cffex.rag.common.domain.query.PlanType.STANDARD_RETRIEVAL,
+                com.cffex.rag.common.domain.metadata.RetrievalMode.FULL_TEXT,
+                null,
+                new ApiModels.RetrievalTuning(null, null, null, false),
+                null
+        ));
+
+        ArgumentCaptor<RetrievalContext> contextCaptor = ArgumentCaptor.forClass(RetrievalContext.class);
+        verify(queryPlannerFacade).plan(contextCaptor.capture());
+        assertEquals(com.cffex.rag.common.domain.metadata.RetrievalMode.FULL_TEXT,
+                contextCaptor.getValue().retrievalMode());
+        assertFalse(contextCaptor.getValue().rerankEnabled());
     }
 
     @Test
@@ -328,6 +365,7 @@ class RagApiServiceTest {
     @Test
     void answer_buildsReferencesFromChunkMetadata() {
         AppProperties appProperties = new AppProperties();
+        appProperties.getRag().getIntent().setEnabled(false);
         appProperties.getRag().setDifyFilesUrl("http://dify.example.com/v1/files");
         appProperties.getRag().getAnswer().setDefaultLlmModel("qwen-test");
         appProperties.getRag().getAnswer().setDefaultTemperature(0.2d);
@@ -364,6 +402,10 @@ class RagApiServiceTest {
                 "doc-1", new DocumentMeta("doc-1", "kb-1", "政策文件.pdf", "file-abc", "upload_files/tenant-a/storage-policy.pdf"),
                 "doc-2", new DocumentMeta("doc-2", "kb-1", "技术标准.docx", "file-xyz", "upload_files/tenant-a/storage-standard.docx")
         ));
+        when(metadataQueryService.listKnowledgeBases(any(KnowledgeBaseQueryCondition.class))).thenReturn(List.of(
+                new KnowledgeBaseMeta("kb-1", RetrievalMode.HYBRID, "collection-1", true, null, false, false,
+                        0.0d, 0.7d, 0.3d, "业务规则库")
+        ));
         when(llmService.generate(any())).thenReturn(new LlmResponse("answer", "stop", Map.of()));
 
         ApiModels.RagAnswerResponse response = ragApiService.answer(simpleAnswerRequest("hello"));
@@ -372,8 +414,12 @@ class RagApiServiceTest {
         assertEquals(2, response.references().size());
         assertEquals("政策文件.pdf", response.references().get(0).fileName());
         assertEquals("http://dify.example.com/v1/files/storage-policy.pdf", response.references().get(0).path());
+        assertEquals("doc-1", response.references().get(0).documentId());
+        assertEquals("业务规则库", response.references().get(0).datasetName());
         assertEquals("技术标准.docx", response.references().get(1).fileName());
         assertEquals("http://dify.example.com/v1/files/storage-standard.docx", response.references().get(1).path());
+        assertEquals("doc-2", response.references().get(1).documentId());
+        assertEquals("业务规则库", response.references().get(1).datasetName());
 
         ArgumentCaptor<LlmRequest> llmCaptor = ArgumentCaptor.forClass(LlmRequest.class);
         verify(llmService).generate(llmCaptor.capture());
@@ -383,6 +429,68 @@ class RagApiServiceTest {
         assertTrue(userPrompt.contains("[片段 1] 来源文件：政策文件.pdf"));
         assertTrue(userPrompt.contains("[片段 2] 来源文件：政策文件.pdf"));
         assertTrue(userPrompt.contains("[片段 3] 来源文件：技术标准.docx"));
+    }
+
+    @Test
+    void answer_usesReferenceUrlForConfluenceDocumentAndKeepsDefaultPathForOtherDocuments() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getRag().getIntent().setEnabled(false);
+        appProperties.getRag().setDifyFilesUrl("http://dify.example.com/v1/files");
+        appProperties.getRag().getAnswer().setDefaultLlmModel("qwen-test");
+        appProperties.getRag().getAnswer().setDefaultTemperature(0.2d);
+        appProperties.getRag().getAnswer().setDefaultMaxTokens(4096);
+        appProperties.getRag().getAnswer().setDefaultSystemPrompt("configured prompt");
+        ragApiService = new RagApiService(
+                metadataQueryService,
+                queryPlannerFacade,
+                retrievalEngine,
+                llmService,
+                appProperties,
+                conversationMemoryService
+        );
+
+        ExecutionPlan executionPlan = sampleExecutionPlan(null);
+        when(queryPlannerFacade.plan(any(QueryPlanRequest.class))).thenReturn(executionPlan);
+        when(retrievalEngine.execute(executionPlan.primaryRetrievalPlan())).thenReturn(new RetrievalResult(
+                "req-1",
+                List.of(
+                        new RetrievedChunk("chunk-1", "doc-1", "kb-1", 0.9, null, 0.8, "content 1",
+                                Map.of("document_name", "Confluence 页面", "upload_file_id", "file-abc")),
+                        new RetrievedChunk("chunk-2", "doc-2", "kb-1", 0.8, null, 0.7, "content 2",
+                                Map.of("document_name", "普通文档.pdf", "upload_file_id", "file-xyz")),
+                        new RetrievedChunk("chunk-3", "doc-3", "kb-1", 0.7, null, 0.6, "content 3",
+                                Map.of("document_name", "缺少链接的页面", "upload_file_id", "file-empty"))
+                ),
+                Map.of()
+        ));
+        when(metadataQueryService.listModels(any())).thenReturn(List.of(
+                new ModelMeta("llm-default", "qwen-test", ModelType.LLM, "http://llm", "secret", true)
+        ));
+        when(metadataQueryService.getDocumentMetas(List.of("doc-1", "doc-2", "doc-3"))).thenReturn(Map.of(
+                "doc-1", new DocumentMeta("doc-1", "kb-1", "Confluence 页面", "file-abc",
+                        "upload_files/tenant-a/confluence.html", "confluence",
+                        "https://confluence.example.com/pages/123"),
+                "doc-2", new DocumentMeta("doc-2", "kb-1", "普通文档.pdf", "file-xyz",
+                        "upload_files/tenant-a/ordinary.pdf", "local_file", "https://unused.example.com"),
+                "doc-3", new DocumentMeta("doc-3", "kb-1", "缺少链接的页面", "file-empty",
+                        "upload_files/tenant-a/confluence-empty.html", "confluence", null)
+        ));
+        when(metadataQueryService.listKnowledgeBases(any(KnowledgeBaseQueryCondition.class))).thenReturn(List.of(
+                new KnowledgeBaseMeta("kb-1", RetrievalMode.HYBRID, "collection-1", true, null, false, false,
+                        0.0d, 0.7d, 0.3d, "业务规则库")
+        ));
+        when(llmService.generate(any())).thenReturn(new LlmResponse("answer", "stop", Map.of()));
+
+        ApiModels.RagAnswerResponse response = ragApiService.answer(simpleAnswerRequest("hello"));
+
+        assertEquals(List.of(
+                new ApiModels.Reference("Confluence 页面", "https://confluence.example.com/pages/123",
+                        "doc-1", "业务规则库"),
+                new ApiModels.Reference("普通文档.pdf", "http://dify.example.com/v1/files/ordinary.pdf",
+                        "doc-2", "业务规则库"),
+                new ApiModels.Reference("缺少链接的页面",
+                        "http://dify.example.com/v1/files/confluence-empty.html", "doc-3", "业务规则库")
+        ), response.references());
     }
 
     @Test
@@ -408,6 +516,7 @@ class RagApiServiceTest {
     @Test
     void answer_omitsReferencesWhenGeneratedAnswerDoesNotCiteSources() {
         AppProperties appProperties = new AppProperties();
+        appProperties.getRag().getIntent().setEnabled(false);
         appProperties.getRag().setDifyFilesUrl("http://dify.example.com/v1/files");
         appProperties.getRag().getAnswer().setDefaultLlmModel("qwen-test");
         appProperties.getRag().getAnswer().setDefaultTemperature(0.2d);
@@ -656,7 +765,8 @@ class RagApiServiceTest {
         ragApiService.streamAnswer(simpleAnswerRequest("hello"), events::add);
 
         assertEquals(
-                List.of("rag_progress", "rag_progress", "rag_progress", "rag_progress", "delta", "rag_progress", "done"),
+                List.of("rag_progress", "rag_progress", "rag_progress", "rag_progress", "delta", "reference",
+                        "rag_progress", "done"),
                 events.stream().map(RagApiService.StreamEvent::name).toList()
         );
         List<ApiModels.RagProgressEvent> progressEvents = events.stream()
@@ -682,6 +792,7 @@ class RagApiServiceTest {
     @Test
     void streamAnswer_replacesModelReferenceSectionWithBackendReferences() {
         AppProperties appProperties = new AppProperties();
+        appProperties.getRag().getIntent().setEnabled(false);
         appProperties.getRag().setDifyFilesUrl("http://dify.example.com/v1/files");
         appProperties.getRag().getAnswer().setDefaultLlmModel("qwen-test");
         appProperties.getRag().getAnswer().setDefaultLlmModelId("llm-default");
@@ -742,18 +853,81 @@ class RagApiServiceTest {
                 .filter(event -> "delta".equals(event.name()))
                 .map(event -> ((ApiModels.RagAnswerStreamDelta) event.payload()).content())
                 .reduce("", String::concat);
-        assertEquals("""
-                正文引用 [1]。
+        assertTrue(streamedAnswer.startsWith("正文引用 [1]。"));
+        assertFalse(streamedAnswer.contains("###### 参考资料"));
+        assertFalse(streamedAnswer.contains("文档ID"));
+        assertFalse(streamedAnswer.contains("（数据集"));
 
-                ---
+        assertEquals(List.of(new ApiModels.Reference(
+                "政策文件.pdf",
+                "http://dify.example.com/v1/files/storage-policy.pdf",
+                "doc-1",
+                "测试知识库"
+        )), referenceEventPayload(events));
+    }
 
-                ###### 参考资料
-                [1] [政策文件.pdf](http://dify.example.com/v1/files/storage-policy.pdf)""", streamedAnswer);
+    @Test
+    void streamAnswer_fallsBackToDatasetIdWhenDatasetNameUnavailable() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getRag().getIntent().setEnabled(false);
+        appProperties.getRag().getAnswer().setDefaultLlmModel("qwen-test");
+        appProperties.getRag().getAnswer().setDefaultLlmModelId("llm-default");
+        appProperties.getRag().getAnswer().setDefaultTemperature(0.2d);
+        appProperties.getRag().getAnswer().setDefaultMaxTokens(4096);
+        appProperties.getRag().getAnswer().setDefaultSystemPrompt("configured prompt");
+        ragApiService = new RagApiService(
+                metadataQueryService,
+                queryPlannerFacade,
+                retrievalEngine,
+                llmService,
+                appProperties,
+                conversationMemoryService
+        );
+
+        ExecutionPlan executionPlan = sampleExecutionPlan(null);
+        when(queryPlannerFacade.plan(any(QueryPlanRequest.class))).thenReturn(executionPlan);
+        when(retrievalEngine.execute(any(RetrievalPlan.class), any())).thenReturn(new RetrievalResult(
+                "req-1",
+                List.of(new RetrievedChunk("chunk-1", "doc-1", "kb-1", 0.9, 0.2, 0.8, "content 1",
+                        Map.of("document_name", "无链接文档.pdf"))),
+                Map.of()
+        ));
+        when(metadataQueryService.listModels(any())).thenReturn(List.of(
+                new ModelMeta("llm-default", "qwen-test", ModelType.LLM, "http://llm", "secret", true)
+        ));
+        when(metadataQueryService.getDocumentMetas(List.of("doc-1"))).thenReturn(Map.of(
+                "doc-1", new DocumentMeta("doc-1", "kb-1", "无链接文档.pdf", null, null)
+        ));
+        doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            java.util.function.Consumer<LlmStreamChunk> consumer = invocation.getArgument(1, java.util.function.Consumer.class);
+            consumer.accept(new LlmStreamChunk("正文引用 [1]。", null, false, Map.of()));
+            consumer.accept(new LlmStreamChunk("", "stop", true, Map.of()));
+            return null;
+        }).when(llmService).streamGenerate(any(), any());
+
+        List<RagApiService.StreamEvent> events = new ArrayList<>();
+        ragApiService.streamAnswer(simpleAnswerRequest("hello"), events::add);
+
+        String streamedAnswer = events.stream()
+                .filter(event -> "delta".equals(event.name()))
+                .map(event -> ((ApiModels.RagAnswerStreamDelta) event.payload()).content())
+                .reduce("", String::concat);
+        assertTrue(streamedAnswer.startsWith("正文引用 [1]。"));
+        assertFalse(streamedAnswer.contains("###### 参考资料"));
+
+        assertEquals(List.of(new ApiModels.Reference(
+                "无链接文档.pdf",
+                null,
+                "doc-1",
+                "kb-1"
+        )), referenceEventPayload(events));
     }
 
     @Test
     void answer_failsWhenDifyFilesUrlHasRepeatedScheme() {
         AppProperties appProperties = new AppProperties();
+        appProperties.getRag().getIntent().setEnabled(false);
         appProperties.getRag().setDifyFilesUrl("http://http://dify.example.com/v1/files");
         appProperties.getRag().getAnswer().setDefaultLlmModel("qwen-test");
         appProperties.getRag().getAnswer().setDefaultLlmModelId("llm-default");
@@ -790,6 +964,7 @@ class RagApiServiceTest {
     @Test
     void streamAnswer_appendsAllBackendReferencesWithoutBodyCitations() {
         AppProperties appProperties = new AppProperties();
+        appProperties.getRag().getIntent().setEnabled(false);
         appProperties.getRag().setDifyFilesUrl("http://dify.example.com/v1/files");
         appProperties.getRag().getAnswer().setDefaultLlmModel("qwen-test");
         appProperties.getRag().getAnswer().setDefaultLlmModelId("llm-default");
@@ -864,9 +1039,31 @@ class RagApiServiceTest {
                 .filter(event -> "delta".equals(event.name()))
                 .map(event -> ((ApiModels.RagAnswerStreamDelta) event.payload()).content())
                 .reduce("", String::concat);
-        assertTrue(streamedAnswer.contains("---\n\n###### 参考资料"));
-        assertTrue(streamedAnswer.contains("[1] [文件1.pdf](http://dify.example.com/v1/files/storage-1.pdf)"));
-        assertTrue(streamedAnswer.contains("[10] [文件10.pdf](http://dify.example.com/v1/files/storage-10.pdf)"));
+        assertFalse(streamedAnswer.contains("###### 参考资料"));
+
+        List<ApiModels.Reference> references = referenceEventPayload(events);
+        assertEquals(10, references.size());
+        assertEquals(new ApiModels.Reference(
+                "文件1.pdf",
+                "http://dify.example.com/v1/files/storage-1.pdf",
+                "doc-1",
+                "kb-1"
+        ), references.get(0));
+        assertEquals(new ApiModels.Reference(
+                "文件10.pdf",
+                "http://dify.example.com/v1/files/storage-10.pdf",
+                "doc-10",
+                "kb-1"
+        ), references.get(9));
+    }
+
+    /** 取出唯一的 reference 事件载荷，顺带校验事件确实只下发一次。 */
+    private static List<ApiModels.Reference> referenceEventPayload(List<RagApiService.StreamEvent> events) {
+        List<RagApiService.StreamEvent> referenceEvents = events.stream()
+                .filter(event -> "reference".equals(event.name()))
+                .toList();
+        assertEquals(1, referenceEvents.size());
+        return ((ApiModels.RagReferenceEvent) referenceEvents.get(0).payload()).references();
     }
 
     private void stubPlanningAndRetrieval(String systemPrompt) {

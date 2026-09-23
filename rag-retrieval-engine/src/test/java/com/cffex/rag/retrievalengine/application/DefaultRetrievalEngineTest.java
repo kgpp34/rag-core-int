@@ -158,19 +158,11 @@ class DefaultRetrievalEngineTest {
         assertThat(publisher.completedDetails.get("knowledgeBases")).isEqualTo(List.of(
                 Map.of(
                         "knowledgeBaseId", "kb-final-1",
-                        "name", "最终知识库一",
-                        "documents", List.of(Map.of(
-                                "documentId", "doc-a",
-                                "documentName", "文档A.pdf"
-                        ))
+                        "name", "最终知识库一"
                 ),
                 Map.of(
                         "knowledgeBaseId", "kb-final-2",
-                        "name", "最终知识库二",
-                        "documents", List.of(Map.of(
-                                "documentId", "doc-b",
-                                "documentName", "文档B.pdf"
-                        ))
+                        "name", "最终知识库二"
                 )
         ));
     }

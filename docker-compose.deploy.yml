@@ -1,7 +1,7 @@
 services:
   rag-core-int:
     container_name: rag-core-int
-    image: ${APP_IMAGE:-rag-core-int:amd64}
+    image: ${APP_IMAGE:-rag-core-int:0.2.9-amd64}
     platform: ${DOCKER_PLATFORM:-linux/amd64}
     restart: unless-stopped
     ports:
@@ -27,6 +27,12 @@ services:
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-rag}
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
       SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+      # Agentic RAG 服务地址只配置协议、主机和端口，不要包含 /v1/runs。
+      RAG_AGENTIC_ENABLED: ${RAG_AGENTIC_ENABLED:-true}
+      RAG_AGENTIC_BASE_URL: ${RAG_AGENTIC_BASE_URL:-http://rag-agentic-int.internal:8000}
+      RAG_AGENTIC_AUTH_TOKEN: ${RAG_AGENTIC_AUTH_TOKEN:-}
+      RAG_AGENTIC_CONNECT_TIMEOUT: ${RAG_AGENTIC_CONNECT_TIMEOUT:-5s}
+      RAG_AGENTIC_RUN_TIMEOUT: ${RAG_AGENTIC_RUN_TIMEOUT:-5m}
       RAG_TRACE_ENABLED: ${RAG_TRACE_ENABLED:-false}
       RAG_TRACE_MODE: ${RAG_TRACE_MODE:-summary}
       RAG_TRACE_INCLUDE_SENSITIVE_PAYLOAD: ${RAG_TRACE_INCLUDE_SENSITIVE_PAYLOAD:-false}

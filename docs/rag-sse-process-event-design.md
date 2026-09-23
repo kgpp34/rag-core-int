@@ -95,7 +95,8 @@ SSE 流程事件面向最终用户和前台产品体验，Trace 面向研发和�
 
 | SSE event name | 说明 |
 | --- | --- |
-| `delta` | LLM 增量输出 |
+| `delta` | LLM 增量输出，只承载答案正文 |
+| `reference` | 参考资料列表（JSON），在答案正文之后、`done` 之前下发 |
 | `done` | 流式请求正常结束 |
 | `error` | 流式请求失败 |
 
@@ -106,6 +107,22 @@ SSE 流程事件面向最终用户和前台产品体验，Trace 面向研发和�
 | `rag_progress` | RAG 流程阶段事件 |
 
 旧版前台如果只处理 `delta`、`done`、`error`，应能够忽略未知的 `rag_progress` 事件，不受影响。
+
+参考资料不再拼进 `delta` 正文，改为独立的 `reference` 事件，载荷是 JSON，字段一律使用英文：
+
+```text
+event: reference
+data:{"references":[{"fileName":"程序化交易管理办法.pdf","path":"https://example.com/files/doc-1","documentId":"doc-1","datasetName":"业务规则库"},{"fileName":"没有链接的文档.pdf","path":null,"documentId":"doc-2","datasetName":"业务规则库"}]}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `fileName` | 文件名 |
+| `path` | 文件访问路径，可能为 `null` |
+| `documentId` | 文档 ID |
+| `datasetName` | 数据集（知识库）名称，取不到名称时退回数据集 ID |
+
+成功结束的流一定会下发一次 `reference` 事件；答案为空或与问题无关时 `references` 为空数组。`reference` 与 `done.metadata.references`（Agentic 路径）内容一致，前者用于流式实时渲染，后者保留兼容。
 
 ### 4.2 统一流程事件模型
 
@@ -447,6 +464,7 @@ event: rag_progress  stage=answer_generation status=milestone milestone=first_to
 event: delta
 event: delta
 event: ...
+event: reference
 event: rag_progress  stage=answer_generation status=completed
 event: done
 ```
