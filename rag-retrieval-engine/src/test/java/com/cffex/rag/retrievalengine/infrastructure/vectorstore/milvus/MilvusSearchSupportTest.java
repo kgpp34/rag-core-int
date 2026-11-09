@@ -123,6 +123,27 @@ class MilvusSearchSupportTest {
         assertThat(json).contains("doc-3");
     }
 
+    @Test
+    void toDenseCandidates_promotesDifyDocIdFromMetadataToTopLevel() {
+        Map<String, Object> metadataMap = new LinkedHashMap<>();
+        metadataMap.put("document_id", "doc-4");
+        metadataMap.put("doc_id", "seg-node-9");
+
+        Map<String, Object> entity = new LinkedHashMap<>();
+        entity.put("page_content", "segment content");
+        entity.put("metadata", metadataMap);
+
+        List<RetrievalCandidate> candidates = searchSupport.toDenseCandidates(
+                buildMockSearchResp(entity, 0.88f),
+                "kb-4"
+        );
+
+        assertThat(candidates).hasSize(1);
+        // dify 的 metadata JSON 里 doc_id 是分段 index_node_id，提到顶层供引用构建反查 position。
+        assertThat(candidates.getFirst().metadata().get("doc_id")).isEqualTo("seg-node-9");
+        assertThat(candidates.getFirst().documentId()).isEqualTo("doc-4");
+    }
+
     private static io.milvus.v2.service.vector.response.SearchResp buildMockSearchResp(
             Map<String, Object> entity,
             float score

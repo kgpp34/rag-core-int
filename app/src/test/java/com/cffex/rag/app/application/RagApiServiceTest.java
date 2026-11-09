@@ -9,6 +9,7 @@ import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +17,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import org.mockito.Mock;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
@@ -37,6 +41,7 @@ import com.cffex.rag.common.domain.metadata.KnowledgeBaseQueryCondition;
 import com.cffex.rag.common.domain.metadata.ModelMeta;
 import com.cffex.rag.common.domain.metadata.ModelType;
 import com.cffex.rag.common.domain.metadata.RetrievalMode;
+import com.cffex.rag.common.domain.metadata.SegmentMeta;
 import com.cffex.rag.common.domain.query.ExecutionPlan;
 import com.cffex.rag.common.domain.query.QueryPlanRequest;
 import com.cffex.rag.common.domain.query.RetrievalPlan;
@@ -54,6 +59,14 @@ import com.cffex.rag.common.service.MetadataQueryService;
 import com.cffex.rag.common.service.QueryPlannerFacade;
 import com.cffex.rag.common.service.RetrievalEngine;
 import com.cffex.rag.common.service.ConversationMemoryService;
+import com.cffex.rag.common.service.TerminologyService;
+import com.cffex.rag.metadatacacher.application.DefaultTerminologyService;
+import com.cffex.rag.metadatacacher.config.TerminologyReplacementProperties;
+import com.cffex.rag.metadatacacher.domain.terminology.TerminologyRecord;
+import com.cffex.rag.trace.application.NoOpTraceRecorder;
+import com.cffex.rag.trace.application.TraceRecorder;
+import com.cffex.rag.trace.config.TraceProperties;
+import com.cffex.rag.trace.domain.TraceEvent;
 
 @ExtendWith(MockitoExtension.class)
 class RagApiServiceTest {
@@ -77,13 +90,7 @@ class RagApiServiceTest {
 
     @BeforeEach
     void setUp() {
-        AppProperties appProperties = new AppProperties();
-        appProperties.getRag().getIntent().setEnabled(false);
-        appProperties.getRag().getAnswer().setDefaultLlmModel("qwen-test");
-        appProperties.getRag().getAnswer().setDefaultLlmModelId("llm-default");
-        appProperties.getRag().getAnswer().setDefaultTemperature(0.2d);
-        appProperties.getRag().getAnswer().setDefaultMaxTokens(4096);
-        appProperties.getRag().getAnswer().setDefaultSystemPrompt("configured prompt");
+        AppProperties appProperties = defaultAppProperties();
         ragApiService = new RagApiService(
                 metadataQueryService,
                 queryPlannerFacade,
@@ -97,6 +104,7 @@ class RagApiServiceTest {
             return new ConversationMemoryContext(request.userId(), null);
         });
         lenient().when(metadataQueryService.getDocumentMetas(any())).thenReturn(Map.of());
+        lenient().when(metadataQueryService.getSegmentMetas(any())).thenReturn(Map.of());
     }
 
     private static ApiModels.RagAnswerRequest simpleAnswerRequest(String query, String systemPrompt) {
@@ -105,6 +113,17 @@ class RagApiServiceTest {
 
     private static ApiModels.RagAnswerRequest simpleAnswerRequest(String query) {
         return simpleAnswerRequest(query, null);
+    }
+
+    private static AppProperties defaultAppProperties() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getRag().getIntent().setEnabled(false);
+        appProperties.getRag().getAnswer().setDefaultLlmModel("qwen-test");
+        appProperties.getRag().getAnswer().setDefaultLlmModelId("llm-default");
+        appProperties.getRag().getAnswer().setDefaultTemperature(0.2d);
+        appProperties.getRag().getAnswer().setDefaultMaxTokens(4096);
+        appProperties.getRag().getAnswer().setDefaultSystemPrompt("configured prompt");
+        return appProperties;
     }
 
     @Test
@@ -198,6 +217,47 @@ class RagApiServiceTest {
 
         assertEquals("answer", response.answer());
         assertEquals(0, response.references().size());
+    }
+
+    @Test
+    void answer_persistsReferencesTraceEvent() {
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
+        ragApiService = new RagApiService(
+                metadataQueryService,
+                queryPlannerFacade,
+                retrievalEngine,
+                llmService,
+                defaultAppProperties(),
+                conversationMemoryService,
+                traceRecorder,
+                new TraceProperties(),
+                new DisabledAgenticRagClient(),
+                new DisabledAgenticRunStore()
+        );
+        ExecutionPlan executionPlan = sampleExecutionPlan(null);
+        when(queryPlannerFacade.plan(any(QueryPlanRequest.class))).thenReturn(executionPlan);
+        when(retrievalEngine.execute(any(RetrievalPlan.class))).thenReturn(new RetrievalResult(
+                "req-1",
+                List.of(new RetrievedChunk(
+                        "chunk-1", "doc-1", "kb-1", 0.9, 0.2, 0.8, "chunk content",
+                        Map.of("document_name", "测试文档.pdf"))),
+                Map.of()
+        ));
+        when(metadataQueryService.listModels(any())).thenReturn(List.of(
+                new ModelMeta("llm-default", "qwen-test", ModelType.LLM, "http://llm", "secret", true)
+        ));
+        when(llmService.generate(any())).thenReturn(new LlmResponse("answer", "stop", Map.of()));
+
+        ragApiService.answer(simpleAnswerRequest("hello"));
+
+        TraceEvent referencesEvent = traceRecorder.events.stream()
+                .filter(event -> "answer_generation.references".equals(event.eventName()))
+                .findFirst()
+                .orElseThrow();
+        Object references = referencesEvent.payload().get("references");
+        assertInstanceOf(List.class, references);
+        assertEquals(1, ((List<?>) references).size());
+        assertEquals("测试文档.pdf", ((ApiModels.Reference) ((List<?>) references).get(0)).fileName());
     }
 
     @Test
@@ -387,13 +447,17 @@ class RagApiServiceTest {
                 "req-1",
                 List.of(
                         new RetrievedChunk("chunk-1", "doc-1", "kb-1", 0.9, 0.2, 0.8, "content 1",
-                                Map.of("document_name", "政策文件.pdf", "upload_file_id", "file-abc")),
+                                Map.of("document_name", "政策文件.pdf", "upload_file_id", "file-abc", "doc_id", "seg-node-1")),
                         new RetrievedChunk("chunk-2", "doc-1", "kb-1", 0.8, 0.1, 0.7, "content 2",
-                                Map.of("document_name", "政策文件.pdf", "upload_file_id", "file-abc")),
+                                Map.of("document_name", "政策文件.pdf", "upload_file_id", "file-abc", "doc_id", "seg-node-2")),
                         new RetrievedChunk("chunk-3", "doc-2", "kb-1", 0.7, null, 0.6, "content 3",
                                 Map.of("document_name", "技术标准.docx", "upload_file_id", "file-xyz"))
                 ),
                 Map.of()
+        ));
+        when(metadataQueryService.getSegmentMetas(any())).thenReturn(Map.of(
+                "seg-node-1", new SegmentMeta("seg-node-1", "doc-1", 0),
+                "seg-node-2", new SegmentMeta("seg-node-2", "doc-1", 1)
         ));
         when(metadataQueryService.listModels(any())).thenReturn(List.of(
                 new ModelMeta("llm-default", "qwen-test", ModelType.LLM, "http://llm", "secret", true)
@@ -416,6 +480,8 @@ class RagApiServiceTest {
         assertEquals("http://dify.example.com/v1/files/storage-policy.pdf", response.references().get(0).path());
         assertEquals("doc-1", response.references().get(0).documentId());
         assertEquals("业务规则库", response.references().get(0).datasetName());
+        // doc_id 能在元数据缓存中命中时返回分段 position，否则回退为检索 chunk ID。
+        assertEquals(List.of("0", "1"), response.references().get(0).chunkIds());
         assertEquals("技术标准.docx", response.references().get(1).fileName());
         assertEquals("http://dify.example.com/v1/files/storage-standard.docx", response.references().get(1).path());
         assertEquals("doc-2", response.references().get(1).documentId());
@@ -485,11 +551,11 @@ class RagApiServiceTest {
 
         assertEquals(List.of(
                 new ApiModels.Reference("Confluence 页面", "https://confluence.example.com/pages/123",
-                        "doc-1", "业务规则库"),
+                        "doc-1", "业务规则库", List.of("chunk-1")),
                 new ApiModels.Reference("普通文档.pdf", "http://dify.example.com/v1/files/ordinary.pdf",
-                        "doc-2", "业务规则库"),
+                        "doc-2", "业务规则库", List.of("chunk-2")),
                 new ApiModels.Reference("缺少链接的页面",
-                        "http://dify.example.com/v1/files/confluence-empty.html", "doc-3", "业务规则库")
+                        "http://dify.example.com/v1/files/confluence-empty.html", "doc-3", "业务规则库", List.of("chunk-3"))
         ), response.references());
     }
 
@@ -862,7 +928,8 @@ class RagApiServiceTest {
                 "政策文件.pdf",
                 "http://dify.example.com/v1/files/storage-policy.pdf",
                 "doc-1",
-                "测试知识库"
+                "测试知识库",
+                List.of("chunk-1")
         )), referenceEventPayload(events));
     }
 
@@ -920,7 +987,8 @@ class RagApiServiceTest {
                 "无链接文档.pdf",
                 null,
                 "doc-1",
-                "kb-1"
+                "kb-1",
+                List.of("chunk-1")
         )), referenceEventPayload(events));
     }
 
@@ -1047,13 +1115,15 @@ class RagApiServiceTest {
                 "文件1.pdf",
                 "http://dify.example.com/v1/files/storage-1.pdf",
                 "doc-1",
-                "kb-1"
+                "kb-1",
+                List.of("chunk-1")
         ), references.get(0));
         assertEquals(new ApiModels.Reference(
                 "文件10.pdf",
                 "http://dify.example.com/v1/files/storage-10.pdf",
                 "doc-10",
-                "kb-1"
+                "kb-1",
+                List.of("chunk-10")
         ), references.get(9));
     }
 
@@ -1066,6 +1136,250 @@ class RagApiServiceTest {
         return ((ApiModels.RagReferenceEvent) referenceEvents.get(0).payload()).references();
     }
 
+    private RagApiService newServiceWithTerminology(TerminologyService terminologyService) {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getRag().getIntent().setEnabled(false);
+        appProperties.getRag().getAnswer().setDefaultLlmModel("qwen-test");
+        appProperties.getRag().getAnswer().setDefaultLlmModelId("llm-default");
+        appProperties.getRag().getAnswer().setDefaultTemperature(0.2d);
+        appProperties.getRag().getAnswer().setDefaultMaxTokens(4096);
+        appProperties.getRag().getAnswer().setDefaultSystemPrompt("configured prompt");
+        return new RagApiService(
+                metadataQueryService,
+                queryPlannerFacade,
+                retrievalEngine,
+                llmService,
+                appProperties,
+                conversationMemoryService,
+                new NoOpTraceRecorder(),
+                new TraceProperties(),
+                new DisabledAgenticRagClient(),
+                new DisabledAgenticRunStore(),
+                terminologyService
+        );
+    }
+
+    private static DefaultTerminologyService enabledTerminologyService(TerminologyRecord... records) {
+        TerminologyReplacementProperties properties = new TerminologyReplacementProperties();
+        properties.setEnabled(true);
+        DefaultTerminologyService service = new DefaultTerminologyService(properties);
+        service.reload(List.of(records));
+        return service;
+    }
+
+    private ExecutionPlan twoKbExecutionPlan(String query, RankingSpec rankingSpec) {
+        return new ExecutionPlan(
+                com.cffex.rag.common.domain.query.PlanType.STANDARD_RETRIEVAL,
+                query,
+                null,
+                List.of(new RetrievalPlan(
+                        query,
+                        new EmbeddingSpec(new ModelEndpointSpec("http://embed", "token", "embed-model")),
+                        List.of(
+                                new KnowledgeBaseRecallSpec("kb-1", "collection-1",
+                                        com.cffex.rag.common.domain.metadata.RetrievalMode.HYBRID, List.of("doc-1"), 20),
+                                new KnowledgeBaseRecallSpec("kb-2", "collection-2",
+                                        com.cffex.rag.common.domain.metadata.RetrievalMode.HYBRID, List.of("doc-2"), 20)
+                        ),
+                        rankingSpec,
+                        5
+                )),
+                Map.of()
+        );
+    }
+
+    @Test
+    void search_terminologyDisabled_singleExecutionWithOriginalPlan() {
+        ragApiService = newServiceWithTerminology(TerminologyService.DISABLED);
+        ExecutionPlan executionPlan = sampleExecutionPlan(null);
+        RetrievalPlan plan = executionPlan.primaryRetrievalPlan();
+        when(queryPlannerFacade.plan(any(QueryPlanRequest.class))).thenReturn(executionPlan);
+        when(retrievalEngine.execute(plan)).thenReturn(sampleRetrieval());
+
+        ragApiService.search(new ApiModels.QueryRequest("口语词是什么", List.of("doc-1"), null, null));
+
+        verify(retrievalEngine, times(1)).execute(plan);
+    }
+
+    @Test
+    void search_terminologyNoHit_singleExecutionWithOriginalPlan() {
+        ragApiService = newServiceWithTerminology(enabledTerminologyService(
+                new TerminologyRecord(1, "global", null, "术语", "[\"口语\"]")));
+        ExecutionPlan executionPlan = sampleExecutionPlan(null);
+        RetrievalPlan plan = executionPlan.primaryRetrievalPlan();
+        when(queryPlannerFacade.plan(any(QueryPlanRequest.class))).thenReturn(executionPlan);
+        when(retrievalEngine.execute(plan)).thenReturn(sampleRetrieval());
+
+        ragApiService.search(new ApiModels.QueryRequest("hello", List.of("doc-1"), null, null));
+
+        verify(retrievalEngine, times(1)).execute(plan);
+    }
+
+    @Test
+    void search_terminologyGlobalHit_singleExecutionWithReplacedQuery() {
+        ragApiService = newServiceWithTerminology(enabledTerminologyService(
+                new TerminologyRecord(1, "global", null, "术语词", "[\"口语词\"]")));
+        // 生产中 plan.query() 即请求原文（StandardRetrievalPlanner 直接用 request.query() 构建计划）
+        ExecutionPlan executionPlan = sampleExecutionPlan(null, "口语词是什么");
+        RetrievalPlan plan = executionPlan.primaryRetrievalPlan();
+        when(queryPlannerFacade.plan(any(QueryPlanRequest.class))).thenReturn(executionPlan);
+        when(retrievalEngine.execute(any(RetrievalPlan.class))).thenReturn(sampleRetrieval());
+
+        ragApiService.search(new ApiModels.QueryRequest("口语词是什么", List.of("doc-1"), null, null));
+
+        ArgumentCaptor<RetrievalPlan> planCaptor = ArgumentCaptor.forClass(RetrievalPlan.class);
+        verify(retrievalEngine, times(1)).execute(planCaptor.capture());
+        assertEquals("术语词是什么", planCaptor.getValue().query());
+        assertEquals(plan.recallSpecs(), planCaptor.getValue().recallSpecs());
+    }
+
+    @Test
+    void answer_terminologyHit_keepsOriginalQuestionAndAddsNormalizedContext() {
+        ragApiService = newServiceWithTerminology(enabledTerminologyService(
+                new TerminologyRecord(1, "global", null, "专业术语", "[\"口语词\"]")));
+        when(queryPlannerFacade.plan(any(QueryPlanRequest.class)))
+                .thenReturn(sampleExecutionPlan(null, "口语词是什么"));
+        when(retrievalEngine.execute(any(RetrievalPlan.class))).thenReturn(sampleRetrieval());
+        when(metadataQueryService.listModels(any())).thenReturn(List.of(
+                new ModelMeta("llm-default", "qwen-test", ModelType.LLM, "http://llm", "secret", true)
+        ));
+        when(llmService.generate(any())).thenReturn(new LlmResponse("answer", "stop", Map.of()));
+
+        ragApiService.answer(simpleAnswerRequest("口语词是什么"));
+
+        ArgumentCaptor<LlmRequest> llmCaptor = ArgumentCaptor.forClass(LlmRequest.class);
+        verify(llmService).generate(llmCaptor.capture());
+        String userPrompt = llmCaptor.getValue().messages().get(1).content();
+        assertTrue(userPrompt.contains("用户问题：口语词是什么"));
+        assertTrue(userPrompt.contains("口语词 → 专业术语"));
+        assertTrue(userPrompt.contains("专业术语是什么"));
+    }
+
+    @Test
+    void search_terminologyKbHit_splitsPlansAndMerges() {
+        ragApiService = newServiceWithTerminology(enabledTerminologyService(
+                new TerminologyRecord(2, "single_kb", "kb-1", "保证金监控", "[\"保证金系数\"]")));
+        when(queryPlannerFacade.plan(any(QueryPlanRequest.class))).thenReturn(twoKbExecutionPlan(
+                "保证金系数要求是什么", RankingSpec.WeightedRankingSpec.equalWeight()));
+        when(retrievalEngine.execute(any(RetrievalPlan.class))).thenAnswer(invocation -> {
+            RetrievalPlan invoked = invocation.getArgument(0, RetrievalPlan.class);
+            String kbId = invoked.recallSpecs().get(0).knowledgeBaseId();
+            return new RetrievalResult(
+                    "req-" + invoked.query() + "-" + kbId,
+                    List.of(new RetrievedChunk(
+                            "chunk-" + kbId, "doc-1", kbId, 0.9, 0.2, 0.8, "content " + kbId, Map.of())),
+                    Map.of()
+            );
+        });
+
+        ApiModels.RetrievalResponse response = ragApiService.search(
+                new ApiModels.QueryRequest("保证金系数要求是什么", List.of("doc-1"), null, null));
+
+        ArgumentCaptor<RetrievalPlan> planCaptor = ArgumentCaptor.forClass(RetrievalPlan.class);
+        verify(retrievalEngine, times(2)).execute(planCaptor.capture());
+        List<RetrievalPlan> executedPlans = planCaptor.getAllValues();
+        RetrievalPlan replacedPlan = executedPlans.stream()
+                .filter(executed -> !"保证金系数要求是什么".equals(executed.query()))
+                .findFirst()
+                .orElseThrow();
+        RetrievalPlan originalPlan = executedPlans.stream()
+                .filter(executed -> "保证金系数要求是什么".equals(executed.query()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("保证金监控要求是什么", replacedPlan.query());
+        assertEquals(List.of("kb-1"), replacedPlan.recallSpecs().stream()
+                .map(KnowledgeBaseRecallSpec::knowledgeBaseId).toList());
+        assertEquals(List.of("kb-2"), originalPlan.recallSpecs().stream()
+                .map(KnowledgeBaseRecallSpec::knowledgeBaseId).toList());
+
+        assertEquals(2, response.chunks().size());
+        assertEquals("terminology_merge_score_sort", response.debugTrace().get("ranking_mode"));
+    }
+
+    @Test
+    void search_terminologyKbHit_appliesFinalRerankAcrossGroups() {
+        ragApiService = newServiceWithTerminology(enabledTerminologyService(
+                new TerminologyRecord(2, "single_kb", "kb-1", "保证金监控", "[\"保证金系数\"]")));
+        when(queryPlannerFacade.plan(any(QueryPlanRequest.class))).thenReturn(twoKbExecutionPlan(
+                "保证金系数要求是什么",
+                new RankingSpec.RerankRankingSpec(new ModelEndpointSpec("http://rerank", "token", "rerank-model"))));
+        when(retrievalEngine.execute(any(RetrievalPlan.class))).thenAnswer(invocation -> {
+            RetrievalPlan invoked = invocation.getArgument(0, RetrievalPlan.class);
+            String kbId = invoked.recallSpecs().get(0).knowledgeBaseId();
+            return new RetrievalResult(
+                    "req-" + kbId,
+                    List.of(new RetrievedChunk(
+                            "chunk-" + kbId, "doc-1", kbId, 0.9, 0.2, 0.8, "content", Map.of())),
+                    Map.of()
+            );
+        });
+        when(retrievalEngine.rerank(anyString(), anyList(), any(), anyInt()))
+                .thenAnswer(invocation -> invocation.getArgument(1, List.class));
+
+        ApiModels.RetrievalResponse response = ragApiService.search(
+                new ApiModels.QueryRequest("保证金系数要求是什么", List.of("doc-1"), null, null));
+
+        ArgumentCaptor<String> queryCaptor = ArgumentCaptor.forClass(String.class);
+        verify(retrievalEngine).rerank(queryCaptor.capture(), anyList(), any(), anyInt());
+        assertEquals("保证金系数要求是什么", queryCaptor.getValue());
+        assertEquals("terminology_merge_rerank", response.debugTrace().get("ranking_mode"));
+    }
+
+    @Test
+    void search_terminologyWithRewrite_appliesPerVariantAndKeepsOriginalRerankQuery() {
+        ragApiService = newServiceWithTerminology(enabledTerminologyService(
+                new TerminologyRecord(2, "single_kb", "kb-1", "保证金监控", "[\"保证金系数\"]")));
+        when(queryPlannerFacade.plan(any(QueryPlanRequest.class))).thenReturn(twoKbExecutionPlan(
+                "保证金系数要求是什么",
+                new RankingSpec.RerankRankingSpec(new ModelEndpointSpec("http://rerank", "token", "rerank-model"))));
+        when(metadataQueryService.listModels(any())).thenReturn(List.of(
+                new ModelMeta("llm-default", "qwen-test", ModelType.LLM, "http://llm", "secret", true)
+        ));
+        when(llmService.generate(any())).thenReturn(new LlmResponse("""
+                {
+                  "dependsOnHistory": false,
+                  "resolvedQuestion": "保证金系数要求是什么",
+                  "retrievalQueries": ["改写问题"],
+                  "reason": "独立问题"
+                }
+                """, "stop", Map.of()));
+        when(retrievalEngine.execute(any(RetrievalPlan.class))).thenAnswer(invocation -> {
+            RetrievalPlan invoked = invocation.getArgument(0, RetrievalPlan.class);
+            return new RetrievalResult(
+                    "req-" + invoked.query(),
+                    List.of(new RetrievedChunk(
+                            "chunk-" + invoked.query() + "-" + invoked.recallSpecs().size(),
+                            "doc-1", invoked.recallSpecs().get(0).knowledgeBaseId(),
+                            0.9, 0.2, 0.8, "content", Map.of())),
+                    Map.of()
+            );
+        });
+        when(retrievalEngine.rerank(anyString(), anyList(), any(), anyInt()))
+                .thenAnswer(invocation -> invocation.getArgument(1, List.class));
+
+        ragApiService.search(new ApiModels.QueryRequest(
+                "保证金系数要求是什么",
+                List.of("doc-1"),
+                null,
+                null,
+                null,
+                new ApiModels.QueryRewriteConfig(true, "rewrite prompt")
+        ));
+
+        // 变体1（原文）命中 kb-1 规则拆成 2 组，变体2（改写）无命中 1 组，共 3 次执行
+        ArgumentCaptor<RetrievalPlan> planCaptor = ArgumentCaptor.forClass(RetrievalPlan.class);
+        verify(retrievalEngine, times(3)).execute(planCaptor.capture());
+        List<String> executedQueries = planCaptor.getAllValues().stream().map(RetrievalPlan::query).toList();
+        assertTrue(executedQueries.contains("保证金监控要求是什么"));
+        assertTrue(executedQueries.contains("保证金系数要求是什么"));
+        assertTrue(executedQueries.contains("改写问题"));
+
+        // 最终 rerank 的参照 query 仍是原始问题，不做术语替换
+        ArgumentCaptor<String> rerankQueryCaptor = ArgumentCaptor.forClass(String.class);
+        verify(retrievalEngine).rerank(rerankQueryCaptor.capture(), anyList(), any(), anyInt());
+        assertEquals("保证金系数要求是什么", rerankQueryCaptor.getValue());
+    }
+
     private void stubPlanningAndRetrieval(String systemPrompt) {
         ExecutionPlan executionPlan = sampleExecutionPlan(systemPrompt);
         RetrievalPlan plan = executionPlan.primaryRetrievalPlan();
@@ -1074,12 +1388,16 @@ class RagApiServiceTest {
     }
 
     private ExecutionPlan sampleExecutionPlan(String systemPrompt) {
+        return sampleExecutionPlan(systemPrompt, "hello");
+    }
+
+    private ExecutionPlan sampleExecutionPlan(String systemPrompt, String query) {
         return new ExecutionPlan(
                 com.cffex.rag.common.domain.query.PlanType.STANDARD_RETRIEVAL,
-                "hello",
+                query,
                 systemPrompt,
                 List.of(new RetrievalPlan(
-                        "hello",
+                        query,
                         new EmbeddingSpec(new ModelEndpointSpec("http://embed", "token", "embed-model")),
                         List.of(new KnowledgeBaseRecallSpec("kb-1", "collection-1", com.cffex.rag.common.domain.metadata.RetrievalMode.HYBRID, List.of("doc-1"), 20)),
                         RankingSpec.WeightedRankingSpec.equalWeight(),
@@ -1095,5 +1413,19 @@ class RagApiServiceTest {
                 List.of(new RetrievedChunk("chunk-1", "doc-1", "kb-1", 0.9, 0.2, 0.8, "chunk content", Map.of())),
                 Map.of()
         );
+    }
+
+    private static final class RecordingTraceRecorder implements TraceRecorder {
+        private final List<TraceEvent> events = new ArrayList<>();
+
+        @Override
+        public boolean enabled() {
+            return true;
+        }
+
+        @Override
+        public void record(TraceEvent event) {
+            events.add(event);
+        }
     }
 }

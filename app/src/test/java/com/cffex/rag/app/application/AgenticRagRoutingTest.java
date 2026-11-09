@@ -18,6 +18,7 @@ import com.cffex.rag.app.api.ApiModels;
 import com.cffex.rag.app.config.AppProperties;
 import com.cffex.rag.common.domain.query.PlanType;
 import com.cffex.rag.common.domain.metadata.DocumentMeta;
+import com.cffex.rag.common.domain.metadata.SegmentMeta;
 import com.cffex.rag.common.domain.memory.ConversationMemoryContext;
 import com.cffex.rag.common.domain.memory.ConversationMessage;
 import com.cffex.rag.common.service.ConversationMemoryService;
@@ -171,7 +172,7 @@ class AgenticRagRoutingTest {
                 mapper.readTree("""
                         {
                           "answer": "final answer",
-                          "citations": [{"document_id": "doc-1", "knowledge_base_id": "kb-1", "metadata": {}}],
+                          "citations": [{"document_id": "doc-1", "chunk_id": "chunk-1", "knowledge_base_id": "kb-1", "metadata": {}}],
                           "partial": false,
                           "abstain": false
                         }
@@ -221,7 +222,8 @@ class AgenticRagRoutingTest {
                         "policy.pdf",
                         "http://files/upload-1.pdf",
                         "doc-1",
-                        "业务规则库"
+                        "业务规则库",
+                        List.of("chunk-1")
                 )),
                 response.references());
         verify(runStore).markCompleted(any(), any());
@@ -262,10 +264,12 @@ class AgenticRagRoutingTest {
                         {
                           "answer": "answer[2]",
                           "citations": [
-                            {"document_id": "doc-1", "knowledge_base_id": "kb-1",
+                            {"document_id": "doc-1", "chunk_id": "chunk-1", "knowledge_base_id": "kb-1",
                              "metadata": {"document_name": "unused.pdf"}},
-                            {"document_id": "doc-2", "knowledge_base_id": "kb-1",
-                             "metadata": {"document_name": "cited.pdf"}}
+                            {"document_id": "doc-2", "chunk_id": "chunk-2", "knowledge_base_id": "kb-1",
+                             "metadata": {"document_name": "cited.pdf", "doc_id": "seg-node-2"}},
+                            {"document_id": "doc-2", "chunk_id": "chunk-3", "knowledge_base_id": "kb-1",
+                             "metadata": {"document_name": "cited.pdf", "doc_id": "seg-node-3"}}
                           ],
                           "partial": false,
                           "abstain": false
@@ -275,6 +279,11 @@ class AgenticRagRoutingTest {
         ));
         when(metadataService.getDocumentMetas(List.of("doc-2"))).thenReturn(java.util.Map.of(
                 "doc-2", new DocumentMeta("doc-2", "kb-1", "cited.pdf", "upload-2", null)
+        ));
+        // 引用构建会把 metadata 里的 doc_id（index_node_id）拿到元数据缓存反查分段 position。
+        when(metadataService.getSegmentMetas(any())).thenReturn(java.util.Map.of(
+                "seg-node-2", new SegmentMeta("seg-node-2", "doc-2", 4),
+                "seg-node-3", new SegmentMeta("seg-node-3", "doc-2", 9)
         ));
         when(metadataService.listKnowledgeBases(any(
                 com.cffex.rag.common.domain.metadata.KnowledgeBaseQueryCondition.class))).thenReturn(List.of(
@@ -320,7 +329,8 @@ class AgenticRagRoutingTest {
                         "cited.pdf",
                         "http://files/upload-2.pdf",
                         "doc-2",
-                        "业务规则库"
+                        "业务规则库",
+                        List.of("4", "9")
                 )),
                 ((ApiModels.RagReferenceEvent) events.get(1).payload()).references());
     }
@@ -358,9 +368,9 @@ class AgenticRagRoutingTest {
                         {
                           "answer": "answer",
                           "citations": [
-                            {"document_id": "doc-1", "knowledge_base_id": "kb-1",
+                            {"document_id": "doc-1", "chunk_id": "chunk-1", "knowledge_base_id": "kb-1",
                              "metadata": {"document_name": "one.pdf"}},
-                            {"document_id": "doc-2", "knowledge_base_id": "kb-1",
+                            {"document_id": "doc-2", "chunk_id": "chunk-2", "knowledge_base_id": "kb-1",
                              "metadata": {"document_name": "two.pdf"}}
                           ],
                           "partial": false,
@@ -398,9 +408,232 @@ class AgenticRagRoutingTest {
 
         assertEquals(List.of("reference", "done"), events.stream().map(RagApiService.StreamEvent::name).toList());
         assertEquals(List.of(
-                        new ApiModels.Reference("one.pdf", "http://files/upload-1.pdf", "doc-1", "kb-1"),
-                        new ApiModels.Reference("two.pdf", "http://files/upload-2.pdf", "doc-2", "kb-1")
+                        new ApiModels.Reference("one.pdf", "http://files/upload-1.pdf", "doc-1", "kb-1", List.of("chunk-1")),
+                        new ApiModels.Reference("two.pdf", "http://files/upload-2.pdf", "doc-2", "kb-1", List.of("chunk-2"))
                 ),
                 ((ApiModels.RagReferenceEvent) events.get(0).payload()).references());
+    }
+
+    @Test
+    void streamAnswerFiltersByCitedDocumentIdsEvenWhenReferenceListTruncated() throws Exception {
+        AgenticRagClient client = mock(AgenticRagClient.class);
+        AgenticRunStore runStore = mock(AgenticRunStore.class);
+        ConversationMemoryService memoryService = mock(ConversationMemoryService.class);
+        MetadataQueryService metadataService = mock(MetadataQueryService.class);
+        UUID runId = UUID.randomUUID();
+        ObjectMapper mapper = new ObjectMapper();
+        when(memoryService.resolve(any())).thenReturn(new ConversationMemoryContext("user-1", null));
+        when(client.createRun(any(), any(), any())).thenReturn(runId);
+        doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            java.util.function.Consumer<AgenticRagClient.AgenticEvent> consumer = invocation.getArgument(1);
+            consumer.accept(new AgenticRagClient.AgenticEvent(
+                    "1", "answer.references", mapper.readTree("""
+                            {
+                              "reference_count": 21,
+                              "references_truncated": true,
+                              "references": [
+                                {"citation_no": 2, "document_id": "doc-2", "document_name": "cited.pdf"}
+                              ],
+                              "cited_document_ids": ["doc-2"]
+                            }
+                            """)));
+            consumer.accept(new AgenticRagClient.AgenticEvent(
+                    "2", "run.completed", mapper.readTree("{\"stage\":\"run\"}")));
+            return null;
+        }).when(client).streamEvents(any(), any(), any());
+        when(client.getRun(runId, null)).thenReturn(new AgenticRagClient.AgenticRunResult(
+                "completed",
+                mapper.readTree("""
+                        {
+                          "answer": "answer",
+                          "citations": [
+                            {"document_id": "doc-1", "chunk_id": "chunk-1", "knowledge_base_id": "kb-1",
+                             "metadata": {"document_name": "one.pdf"}},
+                            {"document_id": "doc-2", "chunk_id": "chunk-2", "knowledge_base_id": "kb-1",
+                             "metadata": {"document_name": "cited.pdf"}}
+                          ],
+                          "partial": false,
+                          "abstain": false
+                        }
+                        """),
+                null
+        ));
+        when(metadataService.getDocumentMetas(List.of("doc-2"))).thenReturn(java.util.Map.of(
+                "doc-2", new DocumentMeta("doc-2", "kb-1", "cited.pdf", "upload-2", null)
+        ));
+        when(metadataService.getSegmentMetas(any())).thenReturn(java.util.Map.of());
+        when(metadataService.listKnowledgeBases(any(
+                com.cffex.rag.common.domain.metadata.KnowledgeBaseQueryCondition.class))).thenReturn(List.of());
+
+        AppProperties properties = propertiesWithoutIntent();
+        properties.getRag().setDifyFilesUrl("http://files");
+        RagApiService service = new RagApiService(
+                metadataService,
+                mock(QueryPlannerFacade.class),
+                mock(RetrievalEngine.class),
+                mock(LlmService.class),
+                properties,
+                memoryService,
+                new NoOpTraceRecorder(),
+                new TraceProperties(),
+                client,
+                runStore
+        );
+        List<RagApiService.StreamEvent> events = new ArrayList<>();
+
+        service.streamAnswer(new ApiModels.RagAnswerRequest(
+                "hello", "user-1", List.of("doc-1", "doc-2"), PlanType.AGENTIC_RAG, null, null, null, null),
+                events::add);
+
+        // references 展示列表被截断不再触发"回退全部 citations"——cited_document_ids 是过滤依据。
+        assertEquals(List.of(new ApiModels.Reference(
+                        "cited.pdf",
+                        "http://files/upload-2.pdf",
+                        "doc-2",
+                        "kb-1",
+                        List.of("chunk-2")
+                )),
+                ((ApiModels.RagReferenceEvent) events.get(0).payload()).references());
+    }
+
+    @Test
+    void streamAnswerFiltersByCitedDocumentIdsFromRunOutputWhenSseEndsEarly() throws Exception {
+        AgenticRagClient client = mock(AgenticRagClient.class);
+        AgenticRunStore runStore = mock(AgenticRunStore.class);
+        ConversationMemoryService memoryService = mock(ConversationMemoryService.class);
+        MetadataQueryService metadataService = mock(MetadataQueryService.class);
+        UUID runId = UUID.randomUUID();
+        ObjectMapper mapper = new ObjectMapper();
+        when(memoryService.resolve(any())).thenReturn(new ConversationMemoryContext("user-1", null));
+        when(client.createRun(any(), any(), any())).thenReturn(runId);
+        // SSE 只送达 delta，answer.references 与 run.completed 均丢失，core 走 getRun 对账。
+        doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            java.util.function.Consumer<AgenticRagClient.AgenticEvent> consumer = invocation.getArgument(1);
+            consumer.accept(new AgenticRagClient.AgenticEvent(
+                    "1", "answer.delta", mapper.readTree("{\"delta\":\"answer\"}")));
+            return null;
+        }).when(client).streamEvents(any(), any(), any());
+        when(client.getRun(runId, null)).thenReturn(new AgenticRagClient.AgenticRunResult(
+                "completed",
+                mapper.readTree("""
+                        {
+                          "answer": "answer",
+                          "citations": [
+                            {"document_id": "doc-1", "chunk_id": "chunk-1", "knowledge_base_id": "kb-1",
+                             "metadata": {"document_name": "one.pdf"}},
+                            {"document_id": "doc-2", "chunk_id": "chunk-2", "knowledge_base_id": "kb-1",
+                             "metadata": {"document_name": "cited.pdf"}}
+                          ],
+                          "cited_document_ids": ["doc-2"],
+                          "partial": false,
+                          "abstain": false
+                        }
+                        """),
+                null
+        ));
+        when(metadataService.getDocumentMetas(List.of("doc-2"))).thenReturn(java.util.Map.of(
+                "doc-2", new DocumentMeta("doc-2", "kb-1", "cited.pdf", "upload-2", null)
+        ));
+        when(metadataService.getSegmentMetas(any())).thenReturn(java.util.Map.of());
+        when(metadataService.listKnowledgeBases(any(
+                com.cffex.rag.common.domain.metadata.KnowledgeBaseQueryCondition.class))).thenReturn(List.of());
+
+        AppProperties properties = propertiesWithoutIntent();
+        properties.getRag().setDifyFilesUrl("http://files");
+        RagApiService service = new RagApiService(
+                metadataService,
+                mock(QueryPlannerFacade.class),
+                mock(RetrievalEngine.class),
+                mock(LlmService.class),
+                properties,
+                memoryService,
+                new NoOpTraceRecorder(),
+                new TraceProperties(),
+                client,
+                runStore
+        );
+        List<RagApiService.StreamEvent> events = new ArrayList<>();
+
+        service.streamAnswer(new ApiModels.RagAnswerRequest(
+                "hello", "user-1", List.of("doc-1", "doc-2"), PlanType.AGENTIC_RAG, null, null, null, null),
+                events::add);
+
+        assertEquals(List.of(new ApiModels.Reference(
+                        "cited.pdf",
+                        "http://files/upload-2.pdf",
+                        "doc-2",
+                        "kb-1",
+                        List.of("chunk-2")
+                )),
+                ((ApiModels.RagReferenceEvent) events.get(1).payload()).references());
+    }
+
+    @Test
+    void streamAnswerReturnsEmptyReferencesWhenBodyCitesNothing() throws Exception {
+        AgenticRagClient client = mock(AgenticRagClient.class);
+        AgenticRunStore runStore = mock(AgenticRunStore.class);
+        ConversationMemoryService memoryService = mock(ConversationMemoryService.class);
+        MetadataQueryService metadataService = mock(MetadataQueryService.class);
+        UUID runId = UUID.randomUUID();
+        ObjectMapper mapper = new ObjectMapper();
+        when(memoryService.resolve(any())).thenReturn(new ConversationMemoryContext("user-1", null));
+        when(client.createRun(any(), any(), any())).thenReturn(runId);
+        doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            java.util.function.Consumer<AgenticRagClient.AgenticEvent> consumer = invocation.getArgument(1);
+            consumer.accept(new AgenticRagClient.AgenticEvent(
+                    "1", "answer.references", mapper.readTree("""
+                            {
+                              "reference_count": 0,
+                              "references_truncated": false,
+                              "references": [],
+                              "cited_document_ids": []
+                            }
+                            """)));
+            consumer.accept(new AgenticRagClient.AgenticEvent(
+                    "2", "run.completed", mapper.readTree("{\"stage\":\"run\"}")));
+            return null;
+        }).when(client).streamEvents(any(), any(), any());
+        when(client.getRun(runId, null)).thenReturn(new AgenticRagClient.AgenticRunResult(
+                "completed",
+                mapper.readTree("""
+                        {
+                          "answer": "answer without markers",
+                          "citations": [
+                            {"document_id": "doc-1", "chunk_id": "chunk-1", "knowledge_base_id": "kb-1",
+                             "metadata": {"document_name": "one.pdf"}},
+                            {"document_id": "doc-2", "chunk_id": "chunk-2", "knowledge_base_id": "kb-1",
+                             "metadata": {"document_name": "two.pdf"}}
+                          ],
+                          "cited_document_ids": [],
+                          "partial": false,
+                          "abstain": false
+                        }
+                        """),
+                null
+        ));
+
+        RagApiService service = new RagApiService(
+                metadataService,
+                mock(QueryPlannerFacade.class),
+                mock(RetrievalEngine.class),
+                mock(LlmService.class),
+                propertiesWithoutIntent(),
+                memoryService,
+                new NoOpTraceRecorder(),
+                new TraceProperties(),
+                client,
+                runStore
+        );
+        List<RagApiService.StreamEvent> events = new ArrayList<>();
+
+        service.streamAnswer(new ApiModels.RagAnswerRequest(
+                "hello", "user-1", List.of("doc-1", "doc-2"), PlanType.AGENTIC_RAG, null, null, null, null),
+                events::add);
+
+        // cited_document_ids 字段存在即为权威：正文零引用 → reference 必须为空，不回退全部 citations。
+        assertEquals(List.of(), ((ApiModels.RagReferenceEvent) events.get(0).payload()).references());
     }
 }

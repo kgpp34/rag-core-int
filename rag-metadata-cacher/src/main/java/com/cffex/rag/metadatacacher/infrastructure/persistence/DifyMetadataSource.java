@@ -4,12 +4,15 @@ import com.cffex.rag.common.domain.metadata.BusinessDomain;
 import com.cffex.rag.common.domain.metadata.DocumentMeta;
 import com.cffex.rag.common.domain.metadata.KnowledgeBaseMeta;
 import com.cffex.rag.common.domain.metadata.ModelMeta;
+import com.cffex.rag.common.domain.metadata.SegmentMeta;
+import com.cffex.rag.metadatacacher.config.EngineProperties;
 import com.cffex.rag.metadatacacher.config.MetadataCacherProperties;
 import com.cffex.rag.metadatacacher.consts.MetadataCacheConstants;
 import com.cffex.rag.metadatacacher.domain.MetadataPayload;
 import com.cffex.rag.metadatacacher.domain.port.MetadataSource;
 import com.cffex.rag.metadatacacher.infrastructure.persistence.mapper.DifyDatasetMapper;
 import com.cffex.rag.metadatacacher.infrastructure.persistence.mapper.DifyDocumentMapper;
+import com.cffex.rag.metadatacacher.infrastructure.persistence.mapper.DifySegmentMapper;
 import com.cffex.rag.metadatacacher.infrastructure.persistence.mapper.DifyProviderModelMapper;
 import com.cffex.rag.metadatacacher.infrastructure.persistence.mapper.DifyTagBindingMapper;
 import java.io.IOException;
@@ -37,22 +40,28 @@ public class DifyMetadataSource implements MetadataSource {
 
     private final DifyDatasetMapper datasetMapper;
     private final DifyDocumentMapper documentMapper;
+    private final DifySegmentMapper segmentMapper;
     private final DifyProviderModelMapper providerModelMapper;
     private final DifyTagBindingMapper tagBindingMapper;
     private final MetadataCacherProperties properties;
+    private final EngineProperties engineProperties;
 
     public DifyMetadataSource(
             DifyDatasetMapper datasetMapper,
             DifyDocumentMapper documentMapper,
+            DifySegmentMapper segmentMapper,
             DifyProviderModelMapper providerModelMapper,
             DifyTagBindingMapper tagBindingMapper,
-            MetadataCacherProperties properties
+            MetadataCacherProperties properties,
+            EngineProperties engineProperties
     ) {
         this.datasetMapper = datasetMapper;
         this.documentMapper = documentMapper;
+        this.segmentMapper = segmentMapper;
         this.providerModelMapper = providerModelMapper;
         this.tagBindingMapper = tagBindingMapper;
         this.properties = properties;
+        this.engineProperties = engineProperties;
     }
 
     @Override
@@ -75,6 +84,9 @@ public class DifyMetadataSource implements MetadataSource {
                         row.datasetId(),
                         MetadataConverter.toRetrievalMode(row.retrievalMode()),
                         row.collectionName(),
+                        // 知识库自身 index_struct.type 优先，缺失或本部署不支持时用 rag.engine.* 默认值
+                        MetadataConverter.resolveEngineId(row.vectorType(), engineProperties.vector()),
+                        MetadataConverter.resolveEngineId(row.vectorType(), engineProperties.fullText()),
                         row.enabled(),
                         row.topK(),
                         row.rerankingEnabled(),
@@ -104,6 +116,12 @@ public class DifyMetadataSource implements MetadataSource {
                         DocumentMeta::documentId,
                         DocumentMeta::knowledgeBaseId
                 ));
+        // 读取分段元数据（index_node_id -> position/document_id），用于引用返回时定位分段
+        Map<String, SegmentMeta> segmentMetasByIndexNodeId = readAsMap(
+                segmentMapper.scanAllSegments(),
+                DifySegmentMapper.SegmentRow::indexNodeId,
+                row -> new SegmentMeta(row.indexNodeId(), row.documentId(), row.position())
+        );
         // 读取模型元数据
         Map<String, ModelMeta> modelsById = readAsMap(
                 providerModelMapper.scanAllProviderModels(properties.getDify().getDefaultTenantId()),
@@ -117,6 +135,7 @@ public class DifyMetadataSource implements MetadataSource {
                 modelsById,
                 documentToKnowledgeBase,
                 documentMetasById,
+                segmentMetasByIndexNodeId,
                 domainToKnowledgeBases
         );
     }

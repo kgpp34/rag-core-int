@@ -19,6 +19,11 @@ mybatis:
     map-underscore-to-camel-case: true
 
 rag:
+  engine:
+    # 知识库元数据（datasets.index_struct.type）缺失或本部署不支持时使用的默认引擎。
+    # 有值时以知识库自身的 type 为准，所以老库(Milvus)与新库(Kingbase)可以共存。
+    vector: ${RAG_ENGINE_VECTOR:milvus}
+    full-text: ${RAG_ENGINE_FULL_TEXT:milvus}
   trace:
     enabled: ${RAG_TRACE_ENABLED:false}
     mode: ${RAG_TRACE_MODE:summary}
@@ -62,6 +67,13 @@ rag:
     # 单次摘要输出的最大 token 数，建议控制在 512-1024，避免摘要本身占用过多上下文。
     summary-max-tokens: ${RAG_CHAT_SUMMARY_MAX_TOKENS:512}
     retrieval-augmentation-advisor-enabled: false
+  # 检索术语替换：检索前把 query 中的口语替换为专业术语；回答模型同时接收用户原文、
+  # 标准术语映射和实际检索问题变体。规则数据来自主库 t_kb_terminology。
+  terminology-replacement:
+    enabled: ${RAG_TERMINOLOGY_REPLACEMENT_ENABLED:false}
+    initialize-schema: ${RAG_TERMINOLOGY_REPLACEMENT_INITIALIZE_SCHEMA:true}
+    initial-delay-ms: ${RAG_TERMINOLOGY_REPLACEMENT_INITIAL_DELAY_MS:300000}
+    refresh-interval-ms: ${RAG_TERMINOLOGY_REPLACEMENT_REFRESH_INTERVAL_MS:300000}
 
 metadata-cacher:
   cache-type: in-memory
@@ -93,6 +105,23 @@ milvus:
   content-field-name: page_content
   metadata-field-name: metadata
   embedding-field-name: vector
+
+kingbase:
+  # 「配了 url 就启用」，不再有 enabled 开关；未配置 url 时不建连接池、不注册 kingbase 端口。
+  # 注意：url 必须由 KINGBASE_URL 环境变量提供，不要在这里写死默认值，
+  # 否则 @ConditionalOnProperty 会永远成立。
+  # url: jdbc:postgresql://127.0.0.1:54321/dify_vdb
+  username: ${KINGBASE_USERNAME:dify}
+  password: ${KINGBASE_PASSWORD:}
+  driver-class-name: ${KINGBASE_DRIVER_CLASS_NAME:org.postgresql.Driver}
+  # Dify 写入 Kingbase 时表名是 embedding_<collection>
+  table-prefix: ${KINGBASE_TABLE_PREFIX:embedding_}
+  # 全文检索配置：英文 simple；中文先 CREATE EXTENSION sys_jieba，再配 jiebacfg。留空表示关闭全文检索。
+  # 必须与 Dify 侧的 KINGBASE_FTS_CONFIG 一致，否则命中不了 Dify 建的 GIN 表达式索引。
+  fts-config: ${KINGBASE_FTS_CONFIG:jiebacfg}
+  # KES_Vector 的 hnsw.ef_search 默认 40，小于 candidateK 时 HNSW 会静默截断
+  hnsw-ef-search: ${KINGBASE_HNSW_EF_SEARCH:100}
+  max-pool-size: ${KINGBASE_MAX_POOL_SIZE:10}
 
 query-planner:
   default-plan-type: standard_retrieval

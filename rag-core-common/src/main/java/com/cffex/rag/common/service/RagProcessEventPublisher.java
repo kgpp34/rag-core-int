@@ -30,6 +30,7 @@ public interface RagProcessEventPublisher {
     }
 
     enum RagProcessStage {
+        TERMINOLOGY_REPLACEMENT,
         QUERY_REWRITE,
         RETRIEVAL,
         RERANK,

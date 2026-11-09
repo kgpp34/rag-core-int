@@ -69,7 +69,8 @@ class RagControllerTest {
                         "程序化交易管理办法.pdf",
                         "https://example.com/files/doc-1",
                         "doc-1",
-                        "业务规则库"
+                        "业务规则库",
+                        List.of("chunk-1")
                 ))
         ));
 
@@ -133,7 +134,8 @@ class RagControllerTest {
                             "程序化交易管理办法.pdf",
                             "https://example.com/files/doc-1",
                             "doc-1",
-                            "业务规则库"
+                            "业务规则库",
+                            List.of("chunk-1")
                     )
             ))));
             consumer.accept(new RagApiService.StreamEvent("done", new ApiModels.RagAnswerStreamDone(
@@ -170,6 +172,7 @@ class RagControllerTest {
                 .andExpect(content().string(containsString("data:{\"references\":[{")))
                 .andExpect(content().string(containsString("\"path\":\"https://example.com/files/doc-1\"")))
                 .andExpect(content().string(containsString("\"documentId\":\"doc-1\"")))
+                .andExpect(content().string(containsString("\"chunkIds\":[\"chunk-1\"]")))
                 .andExpect(content().string(containsString("\"datasetName\":\"")))
                 .andExpect(content().string(containsString("stop")));
 

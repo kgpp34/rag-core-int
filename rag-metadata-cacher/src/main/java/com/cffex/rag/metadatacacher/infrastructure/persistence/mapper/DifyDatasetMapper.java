@@ -19,7 +19,9 @@ public interface DifyDatasetMapper {
                 COALESCE((retrieval_model ->> 'score_threshold_enabled')::boolean, FALSE)  AS score_threshold_enabled,
                 COALESCE((retrieval_model ->> 'score_threshold')::float, 0.0)              AS score_threshold,
                 COALESCE((retrieval_model -> 'weights' -> 'vector_setting' ->> 'vector_weight')::float, 0.7) AS vector_weight,
-                COALESCE((retrieval_model -> 'weights' -> 'keyword_setting' ->> 'keyword_weight')::float, 0.3) AS keyword_weight
+                COALESCE((retrieval_model -> 'weights' -> 'keyword_setting' ->> 'keyword_weight')::float, 0.3) AS keyword_weight,
+                -- index_struct.type 记录了该知识库的向量库类型，Dify 切库后靠它区分
+                COALESCE(index_struct::jsonb ->> 'type', 'milvus') AS vector_type
             FROM public.datasets
             """)
     List<DatasetRow> scanAllDatasets();
@@ -35,6 +37,8 @@ public interface DifyDatasetMapper {
             boolean scoreThresholdEnabled,
             double scoreThreshold,
             double vectorWeight,
-            double keywordWeight
+            double keywordWeight,
+            /** datasets.index_struct->>'type'，即该知识库的向量库类型（milvus / kingbase / ...） */
+            String vectorType
     ) {}
 }

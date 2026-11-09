@@ -13,6 +13,7 @@ public record MetadataSnapshot(
         Map<String, ModelMeta> modelsById,
         Map<String, String> documentToKnowledgeBase,
         Map<String, DocumentMeta> documentMetasById,
+        Map<String, SegmentMeta> segmentMetasByIndexNodeId,
         Map<BusinessDomain, List<String>> domainToKnowledgeBases
 ) {
     public MetadataSnapshot {
@@ -21,6 +22,7 @@ public record MetadataSnapshot(
         modelsById = Map.copyOf(Objects.requireNonNull(modelsById, "modelsById must not be null"));
         documentToKnowledgeBase = Map.copyOf(Objects.requireNonNull(documentToKnowledgeBase, "documentToKnowledgeBase must not be null"));
         documentMetasById = Map.copyOf(Objects.requireNonNull(documentMetasById, "documentMetasById must not be null"));
+        segmentMetasByIndexNodeId = Map.copyOf(Objects.requireNonNull(segmentMetasByIndexNodeId, "segmentMetasByIndexNodeId must not be null"));
         domainToKnowledgeBases = Objects.requireNonNull(domainToKnowledgeBases, "domainToKnowledgeBases must not be null")
                 .entrySet()
                 .stream()

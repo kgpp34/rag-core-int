@@ -14,6 +14,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 final class MetadataConverter {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final String DEFAULT_ENGINE_ID = "milvus";
+    /** 本引擎已经实现过的存储端口；其余类型一律走默认引擎 */
+    private static final java.util.Set<String> SUPPORTED_ENGINE_IDS = java.util.Set.of("milvus", "kingbase");
 
     private MetadataConverter() {
     }
@@ -28,6 +31,30 @@ final class MetadataConverter {
             return ModelType.LLM;
         }
         return ModelType.EMBEDDING;
+    }
+
+    /**
+     * 解析知识库应该用哪个检索引擎。
+     *
+     * <p>优先级：{@code datasets.index_struct.type} &gt; 调用方给的本部署默认值 &gt; milvus。
+     * 认得的只有本引擎真正实现过的存储（milvus / kingbase）；其它类型
+     * （pgvector / weaviate / ...）视为“本部署未实现”，回落到默认值，
+     * 避免 RetrieverRegistry 抛 "No storage port supports engineId=..."。
+     * 新增存储引擎时在 {@link #SUPPORTED_ENGINE_IDS} 里加一条即可。
+     */
+    static String resolveEngineId(String vectorType, String defaultEngineId) {
+        String fallback = normalizeEngineId(defaultEngineId);
+        if (vectorType == null || vectorType.isBlank()) {
+            return fallback;
+        }
+        String candidate = vectorType.trim().toLowerCase(java.util.Locale.ROOT);
+        return SUPPORTED_ENGINE_IDS.contains(candidate) ? candidate : fallback;
+    }
+
+    private static String normalizeEngineId(String engineId) {
+        return engineId == null || engineId.isBlank()
+                ? DEFAULT_ENGINE_ID
+                : engineId.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     static RetrievalMode toRetrievalMode(String code) {

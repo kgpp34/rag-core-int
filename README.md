@@ -97,4 +97,5 @@ curl -N -X POST http://localhost:8080/api/v1/rag/answer \
 ## 文档
 
 - `docs/architecture.md`
+- `docs/terminology-replacement.md`
 - `docs/task-plan.md`

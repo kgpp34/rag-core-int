@@ -8,7 +8,7 @@ public final class MetadataCacheConstants {
 
     public static final String DIFY_SOURCE_NAME = "dify-db";
     public static final MetadataSnapshot EMPTY_SNAPSHOT =
-            new MetadataSnapshot(0L, Instant.EPOCH, Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+            new MetadataSnapshot(0L, Instant.EPOCH, Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
 
     private MetadataCacheConstants() {
     }

@@ -95,6 +95,7 @@ final class SseRagProcessEventPublisher implements RagProcessEventPublisher {
 
     private static String startedTitle(RagProcessStage stage) {
         return switch (stage) {
+            case TERMINOLOGY_REPLACEMENT -> "正在进行术语替换";
             case QUERY_REWRITE -> "正在改写检索问题";
             case RETRIEVAL -> "正在检索知识库";
             case RERANK -> "正在对检索结果重排序";
@@ -104,6 +105,7 @@ final class SseRagProcessEventPublisher implements RagProcessEventPublisher {
 
     private static String completedTitle(RagProcessStage stage) {
         return switch (stage) {
+            case TERMINOLOGY_REPLACEMENT -> "术语替换完成";
             case QUERY_REWRITE -> "检索问题改写完成";
             case RETRIEVAL -> "知识库检索完成";
             case RERANK -> "检索结果重排序完成";
@@ -120,6 +122,7 @@ final class SseRagProcessEventPublisher implements RagProcessEventPublisher {
 
     private static String failedTitle(RagProcessStage stage) {
         return switch (stage) {
+            case TERMINOLOGY_REPLACEMENT -> "术语替换失败";
             case QUERY_REWRITE -> "检索问题改写失败";
             case RETRIEVAL -> "知识库检索失败";
             case RERANK -> "检索结果重排序失败";

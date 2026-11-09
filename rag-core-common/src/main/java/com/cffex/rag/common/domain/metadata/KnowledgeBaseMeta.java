@@ -178,6 +178,45 @@ public record KnowledgeBaseMeta(
         );
     }
 
+    /**
+     * 带检索引擎标识的完整构造器。
+     *
+     * <p>向量与全文默认共用同一个引擎（Kingbase 同时实现了 dense 与 full-text 两个端口），
+     * 需要分开指定时用 record 的主构造器。
+     */
+    public KnowledgeBaseMeta(
+            String knowledgeBaseId,
+            RetrievalMode retrievalMode,
+            String collectionName,
+            String vectorEngineId,
+            String fullTextEngineId,
+            boolean enabled,
+            Integer topK,
+            boolean rerankingEnabled,
+            boolean scoreThresholdEnabled,
+            double scoreThreshold,
+            double vectorWeight,
+            double keywordWeight,
+            String name
+    ) {
+        this(
+                knowledgeBaseId,
+                retrievalMode,
+                collectionName,
+                vectorEngineId,
+                fullTextEngineId,
+                null,
+                enabled,
+                topK,
+                rerankingEnabled,
+                scoreThresholdEnabled,
+                scoreThreshold,
+                vectorWeight,
+                keywordWeight,
+                name
+        );
+    }
+
     public RetrievalBindingMeta bindingOf(RetrievalCapability capability) {
         return bindings.stream()
                 .filter(RetrievalBindingMeta::enabled)

@@ -91,3 +91,19 @@ ON t_rag_trace_event(stage, event_time);
 
 CREATE INDEX IF NOT EXISTS idx_rag_trace_event_name_time
 ON t_rag_trace_event(event_name, event_time);
+
+-- 检索术语替换规则表：scope=global 为全局规则，scope=single_kb 时 kb_id 生效；
+-- "desc" 为口语 JSON 数组（如 ["口语1","口语2"]），列名为 SQL 保留字必须双引号。
+CREATE TABLE IF NOT EXISTS t_kb_terminology (
+    id BIGSERIAL PRIMARY KEY,
+    scope VARCHAR(16) NOT NULL,
+    kb_id VARCHAR(64),
+    term TEXT NOT NULL,
+    "desc" JSONB NOT NULL DEFAULT '[]'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS idx_kb_terminology_scope
+ON t_kb_terminology(scope);
+
+CREATE INDEX IF NOT EXISTS idx_kb_terminology_kb_id
+ON t_kb_terminology(kb_id);

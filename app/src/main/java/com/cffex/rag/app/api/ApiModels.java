@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.databind.JsonNode;
 
 public final class ApiModels {
@@ -60,6 +61,7 @@ public final class ApiModels {
             @Schema(description = "检索方案类型")
             PlanType planType,
             @Schema(description = "请求级检索模式；不传时使用知识库默认模式", example = "HYBRID")
+            @JsonAlias({"retrieval_mode"})
             RetrievalMode retrievalMode,
             @Schema(description = "覆盖默认 system prompt")
             String systemPrompt,
@@ -147,8 +149,14 @@ public final class ApiModels {
             @Schema(description = "文档 ID", example = "8f14e45f-ceea-467f-a1b2-3c4d5e6f7a8b")
             String documentId,
             @Schema(description = "文档所属数据集（知识库）名称", example = "业务规则库")
-            String datasetName
-    ) {}
+            String datasetName,
+            @Schema(description = "该文档被引用的 chunk ID 列表，按引用出现顺序去重排列")
+            List<String> chunkIds
+    ) {
+        public Reference {
+            chunkIds = chunkIds == null ? List.of() : List.copyOf(chunkIds);
+        }
+    }
 
     @Schema(description = "RAG 问答响应")
     public record RagAnswerResponse(

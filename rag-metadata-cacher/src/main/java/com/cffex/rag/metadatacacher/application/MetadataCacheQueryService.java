@@ -5,6 +5,7 @@ import com.cffex.rag.common.domain.metadata.KnowledgeBaseMeta;
 import com.cffex.rag.common.domain.metadata.KnowledgeBaseQueryCondition;
 import com.cffex.rag.common.domain.metadata.MetadataSnapshot;
 import com.cffex.rag.common.domain.metadata.ModelMeta;
+import com.cffex.rag.common.domain.metadata.SegmentMeta;
 import com.cffex.rag.common.domain.metadata.ModelQueryCondition;
 import com.cffex.rag.common.service.MetadataQueryService;
 import com.cffex.rag.metadatacacher.consts.MetadataCacheConstants;
@@ -76,6 +77,20 @@ public class MetadataCacheQueryService implements MetadataQueryService {
             DocumentMeta meta = snapshot.documentMetasById().get(documentId);
             if (meta != null) {
                 result.put(documentId, meta);
+            }
+        }
+        return Map.copyOf(result);
+    }
+
+    @Override
+    public Map<String, SegmentMeta> getSegmentMetas(List<String> indexNodeIds) {
+        MetadataSnapshot snapshot = currentSnapshot();
+        LinkedHashSet<String> uniqueIds = new LinkedHashSet<>(indexNodeIds);
+        Map<String, SegmentMeta> result = new java.util.LinkedHashMap<>();
+        for (String indexNodeId : uniqueIds) {
+            SegmentMeta meta = snapshot.segmentMetasByIndexNodeId().get(indexNodeId);
+            if (meta != null) {
+                result.put(indexNodeId, meta);
             }
         }
         return Map.copyOf(result);

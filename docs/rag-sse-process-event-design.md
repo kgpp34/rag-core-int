@@ -56,6 +56,7 @@ SSE 流程事件面向最终用户和前台产品体验，Trace 面向研发和�
 
 | 阶段代码 | 用户可见名称 | 是否默认推送 |
 | --- | --- | --- |
+| `terminology_replacement` | 正在进行术语替换 | 按需（确有替换时才推送） |
 | `query_rewrite` | 正在改写检索问题 | 按需 |
 | `retrieval` | 正在检索知识库 | 是 |
 | `rerank` | 正在对检索结果重排序 | 按需 |
@@ -112,7 +113,7 @@ SSE 流程事件面向最终用户和前台产品体验，Trace 面向研发和�
 
 ```text
 event: reference
-data:{"references":[{"fileName":"程序化交易管理办法.pdf","path":"https://example.com/files/doc-1","documentId":"doc-1","datasetName":"业务规则库"},{"fileName":"没有链接的文档.pdf","path":null,"documentId":"doc-2","datasetName":"业务规则库"}]}
+data:{"references":[{"fileName":"程序化交易管理办法.pdf","path":"https://example.com/files/doc-1","documentId":"doc-1","datasetName":"业务规则库","chunkIds":["3"]},{"fileName":"没有链接的文档.pdf","path":null,"documentId":"doc-2","datasetName":"业务规则库","chunkIds":["12"]}]}
 ```
 
 | 字段 | 含义 |
@@ -121,6 +122,7 @@ data:{"references":[{"fileName":"程序化交易管理办法.pdf","path":"https:
 | `path` | 文件访问路径，可能为 `null` |
 | `documentId` | 文档 ID |
 | `datasetName` | 数据集（知识库）名称，取不到名称时退回数据集 ID |
+| `chunkIds` | 该文档被引用的分段定位列表，按引用出现顺序去重排列。优先取 dify `document_segments.position`（分段在文档内的序号，从 0 开始）；缓存中查不到 position 时回退为分段 `index_node_id`（dify metadata JSON 的 `doc_id`），再回退为检索 chunk ID。取不到时为空数组 |
 
 成功结束的流一定会下发一次 `reference` 事件；答案为空或与问题无关时 `references` 为空数组。`reference` 与 `done.metadata.references`（Agentic 路径）内容一致，前者用于流式实时渲染，后者保留兼容。
 
@@ -204,6 +206,8 @@ switch (event.stage) {
     updateProgress(event);
 }
 ```
+
+新增阶段（如 `terminology_replacement`，仅在术语替换确有命中时推送）对前台是增量变更，未适配的 `stage` 可直接忽略。
 
 ## 5. 事件示例
 
@@ -507,6 +511,7 @@ public interface RagProcessEventPublisher {
 
 ```java
 public enum RagProcessStage {
+    TERMINOLOGY_REPLACEMENT,
     QUERY_REWRITE,
     RETRIEVAL,
     RERANK,

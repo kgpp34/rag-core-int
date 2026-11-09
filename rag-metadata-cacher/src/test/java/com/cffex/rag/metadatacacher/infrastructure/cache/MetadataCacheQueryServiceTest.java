@@ -11,6 +11,7 @@ import com.cffex.rag.common.domain.metadata.ModelMeta;
 import com.cffex.rag.common.domain.metadata.ModelQueryCondition;
 import com.cffex.rag.common.domain.metadata.ModelType;
 import com.cffex.rag.common.domain.metadata.RetrievalMode;
+import com.cffex.rag.common.domain.metadata.SegmentMeta;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,6 +36,7 @@ class MetadataCacheQueryServiceTest {
                         "model-2", new ModelMeta("model-2", "embed-model", ModelType.EMBEDDING, "http://embed", "k2", true),
                         "model-3", new ModelMeta("model-3", "other-llm", ModelType.LLM, "http://llm2", "k3", false)
                 ),
+                Map.of(),
                 Map.of(),
                 Map.of(),
                 Map.of()
@@ -99,6 +101,21 @@ class MetadataCacheQueryServiceTest {
         assertEquals("upload_files/tenant-a/storage-a.pdf", metas.get("doc-a").uploadFileKey());
     }
 
+    @Test
+    void getSegmentMetas_returnsCachedSegmentInfo() {
+        InMemoryMetadataSnapshotStore snapshotStore = new InMemoryMetadataSnapshotStore();
+        snapshotStore.put(buildSnapshot(Map.of("doc-a", "kb-1")));
+        MetadataCacheQueryService service = new MetadataCacheQueryService(snapshotStore);
+
+        Map<String, SegmentMeta> metas = service.getSegmentMetas(List.of("seg-a", "seg-c", "seg-a"));
+
+        assertEquals(2, metas.size());
+        assertEquals("doc-a", metas.get("seg-a").documentId());
+        assertEquals(0, metas.get("seg-a").position());
+        assertEquals("doc-b", metas.get("seg-c").documentId());
+        assertEquals(2, metas.get("seg-c").position());
+    }
+
     private MetadataSnapshot buildSnapshot(Map<String, String> documentMappings) {
         return new MetadataSnapshot(
                 1L,
@@ -112,6 +129,11 @@ class MetadataCacheQueryServiceTest {
                 Map.of(
                         "doc-a", new DocumentMeta("doc-a", "kb-1", "Document A", "file-a", "upload_files/tenant-a/storage-a.pdf"),
                         "doc-b", new DocumentMeta("doc-b", "kb-2", "Document B", "file-b", "upload_files/tenant-a/storage-b.pdf")
+                ),
+                Map.of(
+                        "seg-a", new SegmentMeta("seg-a", "doc-a", 0),
+                        "seg-b", new SegmentMeta("seg-b", "doc-a", 1),
+                        "seg-c", new SegmentMeta("seg-c", "doc-b", 2)
                 ),
                 Map.of(
                         BusinessDomain.POLICY, List.of("kb-1"),

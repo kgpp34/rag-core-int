@@ -8,10 +8,12 @@ import org.junit.jupiter.api.Test;
 
 import com.cffex.rag.common.domain.metadata.BusinessDomain;
 import com.cffex.rag.common.domain.retrieval.RetrievalCapability;
+import com.cffex.rag.metadatacacher.config.EngineProperties;
 import com.cffex.rag.metadatacacher.config.MetadataCacherProperties;
 import com.cffex.rag.metadatacacher.domain.MetadataPayload;
 import com.cffex.rag.metadatacacher.infrastructure.persistence.mapper.DifyDatasetMapper;
 import com.cffex.rag.metadatacacher.infrastructure.persistence.mapper.DifyDocumentMapper;
+import com.cffex.rag.metadatacacher.infrastructure.persistence.mapper.DifySegmentMapper;
 import com.cffex.rag.metadatacacher.infrastructure.persistence.mapper.DifyProviderModelMapper;
 import com.cffex.rag.metadatacacher.infrastructure.persistence.mapper.DifyTagBindingMapper;
 
@@ -28,9 +30,9 @@ class DifyMetadataSourceTest {
 
         FakeDatasetMapper datasetMapper = new FakeDatasetMapper(List.of(
                 new DifyDatasetMapper.DatasetRow("kb-1", "知识库一", "hybrid_search", "collection-1", true,
-                        15, true, true, 0.4d, 0.8d, 0.2d),
+                        15, true, true, 0.4d, 0.8d, 0.2d, "kingbase"),
                 new DifyDatasetMapper.DatasetRow("kb-2", "知识库二", "hybrid_search", "collection-2", true,
-                        null, false, false, 0.0d, 0.7d, 0.3d)
+                        null, false, false, 0.0d, 0.7d, 0.3d, "pgvector")
         ));
         FakeDocumentMapper documentMapper = new FakeDocumentMapper(List.of(
                 new DifyDocumentMapper.DocumentRow(
@@ -49,18 +51,27 @@ class DifyMetadataSourceTest {
         FakeTagBindingMapper tagBindingMapper = new FakeTagBindingMapper(List.of(
                 new DifyTagBindingMapper.TagBindingRow("rd-data", "kb-2")
         ));
+        FakeSegmentMapper segmentMapper = new FakeSegmentMapper(List.of(
+                new DifySegmentMapper.SegmentRow("seg-node-1", "doc-1", 0),
+                new DifySegmentMapper.SegmentRow("seg-node-2", "doc-1", 1)
+        ));
 
         DifyMetadataSource source = new DifyMetadataSource(
                 datasetMapper,
                 documentMapper,
+                segmentMapper,
                 providerModelMapper,
                 tagBindingMapper,
-                properties
+                properties,
+                new EngineProperties("kingbase", "kingbase")
         );
 
         MetadataPayload payload = source.load();
 
         assertEquals("tenant-a", providerModelMapper.requestedTenantId);
+        assertEquals(2, payload.segmentMetasByIndexNodeId().size());
+        assertEquals(0, payload.segmentMetasByIndexNodeId().get("seg-node-1").position());
+        assertEquals("doc-1", payload.segmentMetasByIndexNodeId().get("seg-node-2").documentId());
         assertEquals(List.of("rd-data"), tagBindingMapper.requestedTagCodes);
         assertEquals(List.of("kb-2"), payload.domainToKnowledgeBases().get(BusinessDomain.RD_DATA));
         assertEquals(List.of("kb-1"), payload.domainToKnowledgeBases().get(BusinessDomain.UNKNOWN));
@@ -86,6 +97,13 @@ class DifyMetadataSourceTest {
                 "collection-1",
                 payload.knowledgeBasesById().get("kb-1").bindingOf(RetrievalCapability.VECTOR).targetName()
         );
+        // index_struct.type=kingbase → 向量与全文都路由到 kingbase
+        assertEquals("kingbase", payload.knowledgeBasesById().get("kb-1").vectorEngineId());
+        assertEquals("kingbase", payload.knowledgeBasesById().get("kb-1").fullTextEngineId());
+        assertEquals("kingbase",
+                payload.knowledgeBasesById().get("kb-1").bindingOf(RetrievalCapability.VECTOR).engineId());
+        // 本部署未实现的存储类型（pgvector）回落 rag.engine.vector 配置的默认引擎
+        assertEquals("kingbase", payload.knowledgeBasesById().get("kb-2").vectorEngineId());
     }
 
     @Test
@@ -111,12 +129,15 @@ class DifyMetadataSourceTest {
                 )
         ));
         FakeTagBindingMapper tagBindingMapper = new FakeTagBindingMapper(List.of());
+        FakeSegmentMapper segmentMapper = new FakeSegmentMapper(List.of());
         DifyMetadataSource source = new DifyMetadataSource(
                 datasetMapper,
                 documentMapper,
+                segmentMapper,
                 providerModelMapper,
                 tagBindingMapper,
-                properties
+                properties,
+                new EngineProperties("kingbase", "kingbase")
         );
 
         MetadataPayload payload = source.load();
@@ -148,6 +169,19 @@ class DifyMetadataSourceTest {
 
         @Override
         public List<DocumentRow> scanAllDocuments() {
+            return rows;
+        }
+    }
+
+    private static final class FakeSegmentMapper implements DifySegmentMapper {
+        private final List<SegmentRow> rows;
+
+        private FakeSegmentMapper(List<SegmentRow> rows) {
+            this.rows = rows;
+        }
+
+        @Override
+        public List<SegmentRow> scanAllSegments() {
             return rows;
         }
     }

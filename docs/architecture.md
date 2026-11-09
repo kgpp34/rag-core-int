@@ -500,7 +500,27 @@ flowchart TD
 - dense 字段：`vector`
 - sparse 字段：`sparse_vector`
 
-### 8.3 OpenAI-compatible Embedding
+### 8.3 Kingbase（人大金仓）
+
+用途：
+
+- dense 向量检索（KES_Vector 扩展，`<=>` 余弦距离）
+- 全文检索（`to_tsvector` / `plainto_tsquery`，中文需 `sys_jieba` 的 `jiebacfg`）
+
+对应适配器（`engineId = kingbase`）：
+
+- `KingbaseVectorSearchAdapter`
+- `KingbaseFullTextSearchAdapter`
+
+开关与配置：
+
+- 配置 `kingbase.url`（环境变量 `KINGBASE_URL`）即启用；未配置时不会创建连接池，也不会注册 kingbase 端口
+- 数据表沿用 Dify 写入约定：`<table-prefix><collectionName>`，列为 `id / text / meta / embedding`
+- 全文检索配置名由 `kingbase.fts-config` 决定，并以字面量拼进 SQL，以便命中
+  `gin (to_tsvector('cfg', text))` 表达式索引
+- 分数语义与 Milvus 对齐：dense 为 `1 - 余弦距离`，全文为 `ts_rank`
+
+### 8.4 OpenAI-compatible Embedding
 
 用途：
 
@@ -510,7 +530,7 @@ flowchart TD
 
 - `OpenAICompatibleEmbeddingAdapter`
 
-### 8.4 OpenAI-compatible Chat Completions
+### 8.5 OpenAI-compatible Chat Completions
 
 用途：
 
@@ -545,6 +565,7 @@ flowchart TD
 - `QueryPlannerProperties`
 - `MetadataCacherProperties`
 - `MilvusProperties`
+- `KingbaseProperties`
 
 说明整个项目的配置并不是单点堆积，而是由各模块各自维护边界内的配置项。
 

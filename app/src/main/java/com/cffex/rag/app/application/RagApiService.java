@@ -1,6 +1,7 @@
 package com.cffex.rag.app.application;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -38,6 +39,7 @@ import com.cffex.rag.common.domain.memory.ConversationMessage;
 import com.cffex.rag.common.domain.memory.ConversationMemoryRequest;
 import com.cffex.rag.common.domain.metadata.DocumentMeta;
 import com.cffex.rag.common.domain.metadata.KnowledgeBaseQueryCondition;
+import com.cffex.rag.common.domain.metadata.SegmentMeta;
 import com.cffex.rag.common.domain.metadata.KnowledgeBaseMeta;
 import com.cffex.rag.common.domain.metadata.ModelMeta;
 import com.cffex.rag.common.domain.metadata.ModelQueryCondition;
@@ -45,11 +47,14 @@ import com.cffex.rag.common.domain.metadata.ModelType;
 import com.cffex.rag.common.domain.query.ExecutionPlan;
 import com.cffex.rag.common.domain.query.QueryPlanRequest;
 import com.cffex.rag.common.domain.query.RetrievalPlan;
+import com.cffex.rag.common.domain.retrieval.KnowledgeBaseRecallSpec;
 import com.cffex.rag.common.domain.retrieval.ModelEndpointSpec;
 import com.cffex.rag.common.domain.retrieval.RankingSpec;
 import com.cffex.rag.common.domain.retrieval.RetrievalContext;
 import com.cffex.rag.common.domain.retrieval.RetrievalResult;
 import com.cffex.rag.common.domain.retrieval.RetrievedChunk;
+import com.cffex.rag.common.domain.terminology.TerminologyReplacement;
+import com.cffex.rag.common.domain.terminology.TerminologyResult;
 import com.cffex.rag.common.exception.RagErrorCode;
 import com.cffex.rag.common.exception.RagServiceException;
 import com.cffex.rag.common.service.LlmService;
@@ -60,6 +65,7 @@ import com.cffex.rag.common.service.RagProcessEventPublisher.RagProcessStage;
 import com.cffex.rag.common.service.RagProcessEventPublisher.StageHandle;
 import com.cffex.rag.common.service.RetrievalEngine;
 import com.cffex.rag.common.service.ConversationMemoryService;
+import com.cffex.rag.common.service.TerminologyService;
 import com.cffex.rag.trace.application.NoOpTraceRecorder;
 import com.cffex.rag.trace.application.TraceRecorder;
 import com.cffex.rag.trace.config.TraceProperties;
@@ -85,7 +91,8 @@ public class RagApiService {
             "intent.direct_answer",
             "query_rewrite.summary",
             "retrieval.summary",
-            "answer_generation.summary"
+            "answer_generation.summary",
+            "answer_generation.references"
     );
     private static final Pattern REFERENCE_HEADING_PATTERN = Pattern.compile("(?m)^\\s{0,3}#{1,6}\\s*参考资料\\s*[:：]?\\s*$");
     private static final String UNRELATED_ANSWER_MESSAGE = "当前检索结果与问题明显不相关，无法基于参考资料回答";
@@ -102,6 +109,7 @@ public class RagApiService {
     private final TraceRecorder traceRecorder;
     private final TraceProperties traceProperties;
     private final QuestionIntentService questionIntentService;
+    private final TerminologyService terminologyService;
 
     @Autowired
     public RagApiService(
@@ -114,7 +122,8 @@ public class RagApiService {
             TraceRecorder traceRecorder,
             TraceProperties traceProperties,
             AgenticRagClient agenticRagClient,
-            AgenticRunStore agenticRunStore
+            AgenticRunStore agenticRunStore,
+            TerminologyService terminologyService
     ) {
         this.metadataQueryService = Objects.requireNonNull(metadataQueryService);
         this.queryPlannerFacade = Objects.requireNonNull(queryPlannerFacade);
@@ -127,6 +136,7 @@ public class RagApiService {
         this.traceRecorder = Objects.requireNonNull(traceRecorder);
         this.traceProperties = Objects.requireNonNull(traceProperties);
         this.questionIntentService = new QuestionIntentService(llmService, metadataQueryService, appProperties);
+        this.terminologyService = Objects.requireNonNull(terminologyService);
     }
 
     RagApiService(
@@ -147,7 +157,35 @@ public class RagApiService {
                 new NoOpTraceRecorder(),
                 new TraceProperties(),
                 new DisabledAgenticRagClient(),
-                new DisabledAgenticRunStore()
+                new DisabledAgenticRunStore(),
+                TerminologyService.DISABLED
+        );
+    }
+
+    RagApiService(
+            MetadataQueryService metadataQueryService,
+            QueryPlannerFacade queryPlannerFacade,
+            RetrievalEngine retrievalEngine,
+            LlmService llmService,
+            AppProperties appProperties,
+            ConversationMemoryService conversationMemoryService,
+            TraceRecorder traceRecorder,
+            TraceProperties traceProperties,
+            AgenticRagClient agenticRagClient,
+            AgenticRunStore agenticRunStore
+    ) {
+        this(
+                metadataQueryService,
+                queryPlannerFacade,
+                retrievalEngine,
+                llmService,
+                appProperties,
+                conversationMemoryService,
+                traceRecorder,
+                traceProperties,
+                agenticRagClient,
+                agenticRunStore,
+                TerminologyService.DISABLED
         );
     }
 
@@ -162,15 +200,16 @@ public class RagApiService {
                 null,
                 false
         ));
-        log.info("开始处理检索请求，问题长度={}，文档数={}，计划类型={}，queryRewrite={}",
+        log.info("开始处理检索请求，问题长度={}，文档数={}，计划类型={}，检索模式={}，queryRewrite={}",
                 request.query().length(),
                 safeList(request.docIds()).size(),
                 request.planType(),
+                request.retrievalMode() == null ? "(未传，用知识库默认)" : request.retrievalMode(),
                 queryRewriteEnabled(request));
         try {
             ExecutionPlan executionPlan = planSearch(request);
             RetrievalPlan plan = executionPlan.primaryRetrievalPlan();
-            RetrievalResult result = executeRetrievalWithRewrite(
+            RetrievalExecutionOutcome outcome = executeRetrievalWithRewrite(
                     request.query(),
                     queryRewriteEnabled(request),
                     queryRewritePrompt(request),
@@ -178,6 +217,7 @@ public class RagApiService {
                     RagProcessEventPublisher.NO_OP,
                     null
             );
+            RetrievalResult result = outcome.result();
             log.info("检索请求处理完成，请求ID={}，结果块数={}，检索子计划数={}，召回规格数={}，排序策略={}",
                     result.requestId(),
                     result.chunks().size(),
@@ -267,7 +307,7 @@ public class RagApiService {
                     preparedAnswer.retrieval().chunks().size(),
                     preparedAnswer.llmModel().modelId(),
                     false);
-            LlmResponse llmResponse = generateAnswer(preparedAnswer.llmRequest());
+            LlmResponse llmResponse = generateAnswer(preparedAnswer.llmRequest(), preparedAnswer.referenceSources());
             log.info("问答请求处理完成，请求ID={}，结束原因={}，结果块数={}",
                     preparedAnswer.retrieval().requestId(),
                     llmResponse.finishReason(),
@@ -404,6 +444,7 @@ public class RagApiService {
             tracePayload.put("elapsedMs", durationMs(generationStart));
             tracePayload.put("stream", true);
             recordTrace("answer_generation", "answer_generation.summary", tracePayload);
+            recordAnswerReferences(answerBuilder.toString(), preparedAnswer.referenceSources());
         }
     }
 
@@ -501,7 +542,13 @@ public class RagApiService {
             agenticRunStore.markCompleted(runId, output);
             terminalRecorded.set(true);
             writeAgenticMemory(runId, memoryContext.conversationId(), request.query(), finalAnswer);
-            List<ApiModels.Reference> references = buildAgenticReferences(output, agenticReferences.get());
+            // 过滤依据优先取 answer.references 事件，事件丢失（如 SSE 提前断开走
+            // getRun 对账）时退回运行输出里的 cited_document_ids，都不存在才回退全部 citations。
+            Set<String> citedDocumentIds = citedDocumentIds(agenticReferences.get());
+            if (citedDocumentIds == null) {
+                citedDocumentIds = citedDocumentIds(output);
+            }
+            List<ApiModels.Reference> references = buildAgenticReferences(output, citedDocumentIds);
             Map<String, Object> metadata = new LinkedHashMap<>();
             metadata.put("runId", runId.toString());
             metadata.put("status", result.status());
@@ -657,13 +704,13 @@ public class RagApiService {
      * <p>当 agentic-int 提供了 {@code answer.references} 事件（正文实际引用到的来源）时，只保留
      * 这些文档；事件缺失或内容被截断时回退为全部 citations，避免新老版本混布时丢引用。
      * URL 与数据集名称仍由 core 自己生成，对外契约保持不变。
+     * 每个文档的 {@code chunkIds} 从 citations 的 {@code chunk_id} 按出现顺序去重聚合。
      */
-    private List<ApiModels.Reference> buildAgenticReferences(JsonNode output, JsonNode agenticReferences) {
+    private List<ApiModels.Reference> buildAgenticReferences(JsonNode output, Set<String> citedDocumentIds) {
         JsonNode citations = output == null ? null : output.path("citations");
         if (citations == null || !citations.isArray() || citations.isEmpty()) {
             return List.of();
         }
-        Set<String> citedDocumentIds = citedDocumentIds(agenticReferences);
         List<String> documentIds = new ArrayList<>();
         citations.forEach(citation -> {
             String documentId = normalizeStatic(citation.path("document_id").asText(null));
@@ -680,6 +727,8 @@ public class RagApiService {
         }
         Map<String, DocumentMeta> documentMetas = metadataQueryService.getDocumentMetas(documentIds);
         Map<String, String> datasetNames = resolveDatasetNames();
+        Map<String, List<String>> chunkIdsByDocument =
+                resolveAgenticChunkIdsByDocument(citations, citedDocumentIds);
         Map<String, ApiModels.Reference> references = new LinkedHashMap<>();
         citations.forEach(citation -> {
             String documentId = normalizeStatic(citation.path("document_id").asText(null));
@@ -713,25 +762,109 @@ public class RagApiService {
             String datasetName = datasetNameOrId(datasetNames, knowledgeBaseId);
             references.putIfAbsent(
                     documentId + '\u001f' + fileName,
-                    new ApiModels.Reference(fileName, path, documentId, datasetName)
+                    new ApiModels.Reference(
+                            fileName,
+                            path,
+                            documentId,
+                            datasetName,
+                            chunkIdsByDocument.getOrDefault(documentId, List.of())
+                    )
             );
         });
         return List.copyOf(references.values());
     }
 
     /**
-     * 读取 agentic-int {@code answer.references} 事件中"正文实际引用到的"文档集合。
+     * 按 documentId 聚合 citations 中每条引用的对外 chunk 标识。
      *
-     * @return 需要保留的 documentId 集合；返回 {@code null} 表示不过滤（回退为全部 citations）
+     * <p>引用条目的 metadata JSON 里带有 dify 分段索引节点 ID（{@code doc_id}）；
+     * 先批量到 metacache 的 document_segments 缓存里换取分段 position，
+     * 未命中时退回 index_node_id 本身，再退回检索链路的原始 chunk 标识。
      */
-    private static Set<String> citedDocumentIds(JsonNode agenticReferences) {
-        if (agenticReferences == null || agenticReferences.isNull()) {
+    private Map<String, List<String>> resolveAgenticChunkIdsByDocument(JsonNode citations, Set<String> citedDocumentIds) {
+        Map<String, List<String>> refsByDocument = new LinkedHashMap<>();
+        citations.forEach(citation -> {
+            String documentId = normalizeStatic(citation.path("document_id").asText(null));
+            if (documentId == null || (citedDocumentIds != null && !citedDocumentIds.contains(documentId))) {
+                return;
+            }
+            String indexNodeId = jsonText(citation.path("metadata"), "doc_id");
+            String rawChunkId = jsonText(citation, "chunk_id");
+            String ref = indexNodeId != null ? indexNodeId : rawChunkId;
+            if (ref == null) {
+                return;
+            }
+            List<String> refs = refsByDocument.computeIfAbsent(documentId, ignored -> new ArrayList<>());
+            if (!refs.contains(ref)) {
+                refs.add(ref);
+            }
+        });
+        if (refsByDocument.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> positions = resolveSegmentPositions(refsByDocument.values().stream()
+                .flatMap(List::stream)
+                .toList());
+        Map<String, List<String>> chunkIdsByDocument = new LinkedHashMap<>();
+        refsByDocument.forEach((documentId, refs) -> {
+            List<String> chunkIds = chunkIdsForRefs(refs, positions);
+            if (!chunkIds.isEmpty()) {
+                chunkIdsByDocument.put(documentId, chunkIds);
+            }
+        });
+        return chunkIdsByDocument;
+    }
+
+    /**
+     * 批量把 dify 分段索引节点 ID 解析成文档内分段序号（position）。
+     * 缓存未命中的 ID 不出现在返回 Map 中，由调用方决定回退值。
+     */
+    private Map<String, String> resolveSegmentPositions(Collection<String> indexNodeIds) {
+        List<String> uniqueIds = List.copyOf(new LinkedHashSet<>(indexNodeIds));
+        if (uniqueIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, SegmentMeta> metas = metadataQueryService.getSegmentMetas(uniqueIds);
+        if (metas == null || metas.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> positions = new LinkedHashMap<>();
+        metas.forEach((indexNodeId, meta) -> positions.put(indexNodeId, String.valueOf(meta.position())));
+        return positions;
+    }
+
+    /** 按引用出现顺序把索引节点 ID 换成对外 chunk 标识并去重。 */
+    private static List<String> chunkIdsForRefs(List<String> refs, Map<String, String> positions) {
+        List<String> chunkIds = new ArrayList<>();
+        for (String ref : refs) {
+            String chunkId = positions.getOrDefault(ref, ref);
+            if (!chunkIds.contains(chunkId)) {
+                chunkIds.add(chunkId);
+            }
+        }
+        return List.copyOf(chunkIds);
+    }
+
+    /**
+     * 读取"正文实际引用到的"文档集合。事件与运行输出（{@code run.output}）统一携带
+     * 未截断的 {@code cited_document_ids}——字段存在即为权威依据（空数组表示正文零引用，
+     * 参考列表必须为空，与正文严格一致）；旧版本只有展示用 {@code references} 列表
+     * （超过 20 条被截断），此时返回 {@code null} 表示不过滤（回退为全部 citations）。
+     *
+     * @return 需要保留的 documentId 集合（可为空集合）；{@code null} 表示无过滤依据
+     */
+    private static Set<String> citedDocumentIds(JsonNode node) {
+        if (node == null || node.isNull()) {
             return null;
         }
-        if (agenticReferences.path("references_truncated").asBoolean(false)) {
+        JsonNode citedIdsNode = node.path("cited_document_ids");
+        if (citedIdsNode.isArray()) {
+            return stringSet(citedIdsNode);
+        }
+        if (node.path("references_truncated").asBoolean(false)) {
             return null;
         }
-        JsonNode references = agenticReferences.path("references");
+        JsonNode references = node.path("references");
         if (!references.isArray() || references.isEmpty()) {
             return null;
         }
@@ -743,6 +876,20 @@ public class RagApiService {
             }
         });
         return documentIds.isEmpty() ? null : documentIds;
+    }
+
+    private static Set<String> stringSet(JsonNode array) {
+        if (!array.isArray() || array.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> values = new LinkedHashSet<>();
+        array.forEach(item -> {
+            String value = item.isTextual() ? normalizeStatic(item.asText()) : null;
+            if (value != null) {
+                values.add(value);
+            }
+        });
+        return values;
     }
 
     private static String jsonText(JsonNode node, String field) {
@@ -937,7 +1084,8 @@ public class RagApiService {
             ApiModels.RagAnswerRequest request,
             List<RetrievedChunk> chunks,
             Map<String, DocumentMeta> documentMetas,
-            List<ReferenceSource> referenceSources
+            List<ReferenceSource> referenceSources,
+            TerminologyPromptContext terminologyContext
     ) {
         List<LlmMessage> messages = new ArrayList<>();
         messages.add(new LlmMessage(LlmMessageRole.SYSTEM, resolveSystemPrompt(executionPlan.systemPrompt())));
@@ -947,6 +1095,7 @@ public class RagApiService {
         prompt.append('\n').append("如果知识片段不足以支持结论，请明确说明。");
         prompt.append('\n').append("不要在正文中输出来源编号、参考资料章节、Markdown 链接或 URL；参考资料由系统自动追加。");
         prompt.append('\n').append('\n').append("用户问题：").append(request.query());
+        appendTerminologyContext(prompt, terminologyContext);
         prompt.append('\n').append('\n').append("知识片段：");
         for (int i = 0; i < chunks.size(); i++) {
             RetrievedChunk chunk = chunks.get(i);
@@ -965,6 +1114,30 @@ public class RagApiService {
         }
         messages.add(new LlmMessage(LlmMessageRole.USER, prompt.toString()));
         return List.copyOf(messages);
+    }
+
+    private static void appendTerminologyContext(
+            StringBuilder prompt,
+            TerminologyPromptContext terminologyContext
+    ) {
+        if (terminologyContext == null || !terminologyContext.changed()) {
+            return;
+        }
+        prompt.append('\n').append('\n').append("术语标准化信息：");
+        prompt.append('\n').append("请结合以下映射理解用户原意，并在回答中优先使用专业术语。");
+        for (TerminologyReplacement replacement : terminologyContext.applied()) {
+            prompt.append('\n').append("- ")
+                    .append(replacement.colloquial())
+                    .append(" → ")
+                    .append(replacement.term());
+            if (replacement.knowledgeBaseId() != null) {
+                prompt.append("（知识库 ").append(replacement.knowledgeBaseId()).append("）");
+            }
+        }
+        prompt.append('\n').append("实际检索问题变体：");
+        for (String normalizedQuery : terminologyContext.normalizedQueries()) {
+            prompt.append('\n').append("- ").append(normalizedQuery);
+        }
     }
 
     private String resolveSystemPrompt(String requestSystemPrompt) {
@@ -1039,7 +1212,7 @@ public class RagApiService {
                 memory != null,
                 memory != null ? memory.conversationId() : null
         ));
-        RetrievalResult retrieval = executeRetrievalWithRewrite(
+        RetrievalExecutionOutcome retrievalOutcome = executeRetrievalWithRewrite(
                 request.query(),
                 queryRewriteEnabled(request),
                 queryRewritePrompt(request),
@@ -1047,6 +1220,7 @@ public class RagApiService {
                 eventPublisher,
                 memoryContext.conversationId()
         );
+        RetrievalResult retrieval = retrievalOutcome.result();
         Map<String, DocumentMeta> documentMetas = resolveDocumentMetas(retrieval.chunks());
         List<ReferenceSource> referenceSources = buildReferenceSources(
                 retrieval.chunks(),
@@ -1061,7 +1235,8 @@ public class RagApiService {
                         request,
                         retrieval.chunks(),
                         documentMetas,
-                        referenceSources
+                        referenceSources,
+                        retrievalOutcome.terminologyContext()
                 ),
                 appProperties.getRag().getAnswer().getDefaultTemperature(),
                 appProperties.getRag().getAnswer().getDefaultMaxTokens(),
@@ -1083,7 +1258,7 @@ public class RagApiService {
             ExecutionPlan plan = shouldUseRetrievalContext(request)
                     ? preserveRequestPrompt(queryPlannerFacade.plan(toRetrievalContext(request)), request.systemPrompt())
                     : queryPlannerFacade.plan(toQueryPlanRequest(request));
-            recordTrace("planning", "planning.completed", planningPayload(plan, durationMs(start)));
+recordTrace("planning", "planning.completed", planningPayload(plan, durationMs(start)));
             return plan;
         } catch (IllegalArgumentException ex) {
             recordTrace("planning", "planning.failed", Map.of("error", summarize(ex), "totalMs", durationMs(start)));
@@ -1132,6 +1307,15 @@ public class RagApiService {
             ExecutionPlan plan = shouldUseRetrievalContext(request)
                     ? preserveRequestPrompt(queryPlannerFacade.plan(toRetrievalContext(request)), request.systemPrompt())
                     : queryPlannerFacade.plan(toQueryPlanRequest(request));
+            if (log.isInfoEnabled()) {
+                String effectiveModes = plan.retrievalPlans().stream()
+                        .flatMap(retrievalPlan -> retrievalPlan.recallSpecs().stream())
+                        .map(spec -> spec.knowledgeBaseId() + ":" + spec.retrievalMode())
+                        .collect(java.util.stream.Collectors.joining(", "));
+                log.info("检索计划生效模式 | requested={}, effective=[{}]",
+                        request.retrievalMode() == null ? "(default)" : request.retrievalMode(),
+                        effectiveModes);
+            }
             recordTrace("planning", "planning.completed", planningPayload(plan, durationMs(start)));
             return plan;
         } catch (IllegalArgumentException ex) {
@@ -1264,7 +1448,7 @@ public class RagApiService {
         return Map.copyOf(details);
     }
 
-    private RetrievalResult executeRetrievalWithRewrite(
+    private RetrievalExecutionOutcome executeRetrievalWithRewrite(
             String originalQuery,
             Boolean queryRewrite,
             String queryRewritePrompt,
@@ -1283,11 +1467,14 @@ public class RagApiService {
                     "rewrittenQueries", List.of(),
                     "elapsedMs", 0
             ));
-            RetrievalResult result = executeRetrieval(basePlan, eventPublisher, 1, 1);
+            // 替换作用于计划自身的 query（实际送入 embedding 的文本）：
+            // 未发生替换时分组文本与 basePlan.query() 恒等 → 复用原计划实例，与无术语特性时的路径完全一致
+            TerminologyExpansion expansion = expandTerminology(basePlan.query(), basePlan, eventPublisher);
+            RetrievalResult result = executeTerminologyExpansion(basePlan, expansion, eventPublisher);
             recordTrace("retrieval", "retrieval.summary", retrievalSummaryPayload(
                     originalQuery,
                     List.of(),
-                    List.of(originalQuery),
+                    expansion.executedQueries(),
                     originalQuery,
                     false,
                     originalQuery,
@@ -1299,7 +1486,10 @@ public class RagApiService {
                     rankingMode(result, "single_query"),
                     durationMs(summaryStart)
             ));
-            return result;
+            return new RetrievalExecutionOutcome(
+                    withTerminologyDebug(result, TerminologyPromptContext.from(List.of(expansion))),
+                    TerminologyPromptContext.from(List.of(expansion))
+            );
         }
 
         QueryRewriteResult rewriteResult = rewriteQuery(originalQuery, queryRewritePrompt, eventPublisher, conversationId);
@@ -1309,11 +1499,12 @@ public class RagApiService {
         log.info("Query 改写完成，dependsOnHistory={}，执行query数={}，rerankQuery={}",
                 rewriteResult.dependsOnHistory(), allQueries.size(), preview(rerankQuery));
 
-        List<RetrievalResult> results = executeRetrievalQueriesInParallel(basePlan, allQueries, eventPublisher);
+        TerminologyRetrievalBatch batch = executeRetrievalQueriesInParallel(basePlan, allQueries, eventPublisher);
+        List<RetrievalResult> results = batch.results();
 
         List<RetrievedChunk> merged = mergeChunks(results);
         recordTrace("retrieval", "retrieval.rewrite_merge.started", Map.of(
-                "queryCount", allQueries.size(),
+                "queryCount", batch.executedQueries().size(),
                 "inputResultCount", results.stream().mapToInt(result -> result.chunks().size()).sum(),
                 "dedupedCount", merged.size()
         ));
@@ -1343,7 +1534,7 @@ public class RagApiService {
         }
 
         recordTrace("retrieval", "retrieval.rewrite_merge.completed", Map.of(
-                "queryCount", allQueries.size(),
+                "queryCount", batch.executedQueries().size(),
                 "mergedCount", merged.size(),
                 "finalCount", merged.size(),
                 "rerankApplied", rerankApplied,
@@ -1354,10 +1545,11 @@ public class RagApiService {
                 "ranking_mode", rerankApplied ? "rewrite_merge_rerank" : "rewrite_merge_score_sort",
                 "final_rerank_ms", finalRerankMs
         ));
+        finalResult = withTerminologyDebug(finalResult, batch.terminologyContext());
         recordTrace("retrieval", "retrieval.summary", retrievalSummaryPayload(
                 originalQuery,
                 subQueries,
-                allQueries,
+                batch.executedQueries(),
                 rerankQuery,
                 rewriteResult.dependsOnHistory(),
                 rewriteResult.resolvedQuestion(),
@@ -1369,29 +1561,53 @@ public class RagApiService {
                 rerankApplied ? "rewrite_merge_rerank" : "rewrite_merge_score_sort",
                 durationMs(summaryStart)
         ));
-        return finalResult;
+        return new RetrievalExecutionOutcome(finalResult, batch.terminologyContext());
     }
 
-    private List<RetrievalResult> executeRetrievalQueriesInParallel(
+    private TerminologyRetrievalBatch executeRetrievalQueriesInParallel(
             RetrievalPlan basePlan,
             List<String> allQueries,
             RagProcessEventPublisher eventPublisher
     ) {
-        Map<String, String> capturedMdc = MDC.getCopyOfContextMap();
-        List<Callable<RetrievalResult>> tasks = new ArrayList<>(allQueries.size());
+        record VariantTask(TerminologyQueryGroup group) {
+        }
+        List<VariantTask> variantTasks = new ArrayList<>(allQueries.size());
+        List<TerminologyExpansion> expansions = new ArrayList<>(allQueries.size());
         for (int i = 0; i < allQueries.size(); i++) {
-            String query = allQueries.get(i);
-            int queryIndex = i + 1;
+            TerminologyExpansion expansion = expandTerminology(allQueries.get(i), basePlan, eventPublisher);
+            expansions.add(expansion);
+            for (TerminologyQueryGroup group : expansion.groups()) {
+                variantTasks.add(new VariantTask(group));
+            }
+        }
+
+        Map<String, String> capturedMdc = MDC.getCopyOfContextMap();
+        List<Callable<RetrievalResult>> tasks = new ArrayList<>(variantTasks.size());
+        for (int i = 0; i < variantTasks.size(); i++) {
+            VariantTask variantTask = variantTasks.get(i);
+            int taskIndex = i + 1;
             tasks.add(() -> {
                 restoreMdc(capturedMdc);
                 try {
-                    return executeRetrieval(withQuery(basePlan, query), eventPublisher, queryIndex, allQueries.size());
+                    return executeRetrieval(
+                            withQueryAndSpecs(basePlan, variantTask.group().queryText(), variantTask.group().recallSpecs()),
+                            eventPublisher,
+                            taskIndex,
+                            variantTasks.size()
+                    );
                 } finally {
                     MDC.clear();
                 }
             });
         }
+        return new TerminologyRetrievalBatch(
+                invokeRetrievalTasks(tasks, "改写查询并行检索"),
+                variantTasks.stream().map(task -> task.group().queryText()).toList(),
+                TerminologyPromptContext.from(expansions)
+        );
+    }
 
+    private List<RetrievalResult> invokeRetrievalTasks(List<Callable<RetrievalResult>> tasks, String failureContext) {
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             List<Future<RetrievalResult>> futures = executor.invokeAll(tasks);
             List<RetrievalResult> results = new ArrayList<>(futures.size());
@@ -1403,7 +1619,7 @@ public class RagApiService {
             Thread.currentThread().interrupt();
             throw new RagServiceException(
                     RagErrorCode.RETRIEVAL_FAILED,
-                    "改写查询并行检索被中断，请稍后重试",
+                    failureContext + "被中断，请稍后重试",
                     ex
             );
         } catch (ExecutionException ex) {
@@ -1413,7 +1629,7 @@ public class RagApiService {
             }
             throw new RagServiceException(
                     RagErrorCode.RETRIEVAL_FAILED,
-                    "改写查询并行检索失败: " + summarize(cause),
+                    failureContext + "失败: " + summarize(cause),
                     cause
             );
         }
@@ -1756,6 +1972,249 @@ public class RagApiService {
         );
     }
 
+    /**
+     * 术语替换后的一个执行分组：同一替换文本 + 该文本对应的知识库召回规格子集。
+     */
+    private record TerminologyQueryGroup(String queryText, List<KnowledgeBaseRecallSpec> recallSpecs) {
+    }
+
+    /**
+     * 单个 query 文本的术语展开结果：按替换后文本分组的执行分组 + 命中的替换明细。
+     */
+    private record TerminologyExpansion(
+            String sourceQuery,
+            List<TerminologyQueryGroup> groups,
+            List<TerminologyReplacement> applied
+    ) {
+        private static TerminologyExpansion identity(String queryText, List<KnowledgeBaseRecallSpec> recallSpecs) {
+            return new TerminologyExpansion(
+                    queryText,
+                    List.of(new TerminologyQueryGroup(queryText, recallSpecs)),
+                    List.of()
+            );
+        }
+
+        private List<String> executedQueries() {
+            return groups.stream().map(TerminologyQueryGroup::queryText).distinct().toList();
+        }
+    }
+
+    private record TerminologyPromptContext(
+            List<String> normalizedQueries,
+            List<TerminologyReplacement> applied
+    ) {
+        private TerminologyPromptContext {
+            normalizedQueries = List.copyOf(normalizedQueries);
+            applied = List.copyOf(applied);
+        }
+
+        private static TerminologyPromptContext from(List<TerminologyExpansion> expansions) {
+            List<TerminologyReplacement> replacements = expansions.stream()
+                    .flatMap(expansion -> expansion.applied().stream())
+                    .distinct()
+                    .toList();
+            if (replacements.isEmpty()) {
+                return new TerminologyPromptContext(List.of(), List.of());
+            }
+            List<String> normalizedQueries = expansions.stream()
+                    .filter(expansion -> !expansion.applied().isEmpty())
+                    .flatMap(expansion -> expansion.groups().stream())
+                    .map(TerminologyQueryGroup::queryText)
+                    .distinct()
+                    .toList();
+            return new TerminologyPromptContext(normalizedQueries, replacements);
+        }
+
+        private boolean changed() {
+            return !applied.isEmpty();
+        }
+    }
+
+    private record TerminologyRetrievalBatch(
+            List<RetrievalResult> results,
+            List<String> executedQueries,
+            TerminologyPromptContext terminologyContext
+    ) {
+    }
+
+    private record RetrievalExecutionOutcome(
+            RetrievalResult result,
+            TerminologyPromptContext terminologyContext
+    ) {
+    }
+
+    /**
+     * 把 query 文本按术语规则展开为执行分组：先全局替换，再对每个知识库在全局结果之上叠加 KB 规则，
+     * 按「替换后文本」对 recallSpecs 分组。特性关闭或未命中任何规则时返回恒等展开（单组、原文、全量 specs）。
+     */
+    private TerminologyExpansion expandTerminology(
+            String queryText,
+            RetrievalPlan plan,
+            RagProcessEventPublisher eventPublisher
+    ) {
+        if (!terminologyService.isEnabled()) {
+            return TerminologyExpansion.identity(queryText, plan.recallSpecs());
+        }
+        TerminologyResult globalResult = terminologyService.replaceGlobal(queryText);
+        Map<String, List<KnowledgeBaseRecallSpec>> specsByText = new LinkedHashMap<>();
+        List<TerminologyReplacement> applied = new ArrayList<>(globalResult.applied());
+        for (KnowledgeBaseRecallSpec spec : plan.recallSpecs()) {
+            TerminologyResult kbResult = terminologyService.replaceForKnowledgeBase(globalResult.text(), spec.knowledgeBaseId());
+            applied.addAll(kbResult.applied());
+            specsByText.computeIfAbsent(kbResult.text(), ignored -> new ArrayList<>()).add(spec);
+        }
+        if (applied.isEmpty()) {
+            return TerminologyExpansion.identity(queryText, plan.recallSpecs());
+        }
+        List<TerminologyQueryGroup> groups = specsByText.entrySet().stream()
+                .map(entry -> new TerminologyQueryGroup(entry.getKey(), List.copyOf(entry.getValue())))
+                .toList();
+        TerminologyExpansion expansion = new TerminologyExpansion(queryText, groups, List.copyOf(applied));
+        publishTerminologyApplied(expansion, eventPublisher);
+        return expansion;
+    }
+
+    private RetrievalPlan withQueryAndSpecs(RetrievalPlan plan, String newQuery, List<KnowledgeBaseRecallSpec> specs) {
+        return new RetrievalPlan(
+                newQuery,
+                plan.embeddingSpec(),
+                specs,
+                plan.globalRankingSpec(),
+                plan.topK(),
+                plan.globalScoreThresholdEnabled(),
+                plan.globalScoreThreshold()
+        );
+    }
+
+    /**
+     * 执行术语展开结果：
+     * <ul>
+     *   <li>单组且文本未变 → 与原路径完全一致的单次执行（0 次多余 embedding）</li>
+     *   <li>单组且文本已变 → 用替换后文本单次执行</li>
+     *   <li>多组 → 各分组并行执行后合并去重，按 rankingScore 降序截断 topK</li>
+     * </ul>
+     */
+    private RetrievalResult executeTerminologyExpansion(
+            RetrievalPlan basePlan,
+            TerminologyExpansion expansion,
+            RagProcessEventPublisher eventPublisher
+    ) {
+        List<TerminologyQueryGroup> groups = expansion.groups();
+        if (groups.size() == 1) {
+            String queryText = groups.get(0).queryText();
+            RetrievalPlan effectivePlan = queryText.equals(basePlan.query())
+                    ? basePlan
+                    : withQuery(basePlan, queryText);
+            return executeRetrieval(effectivePlan, eventPublisher, 1, 1);
+        }
+        List<RetrievalResult> results = executeTerminologyGroupsInParallel(basePlan, groups, eventPublisher);
+        List<RetrievedChunk> merged = mergeChunks(results);
+        ModelEndpointSpec rerankModel = extractRerankModel(basePlan);
+        boolean finalRerankApplied = rerankModel != null && !merged.isEmpty();
+        if (finalRerankApplied) {
+            merged = eventPublisher == RagProcessEventPublisher.NO_OP
+                    ? retrievalEngine.rerank(basePlan.query(), merged, rerankModel, basePlan.topK())
+                    : retrievalEngine.rerank(
+                            basePlan.query(),
+                            merged,
+                            rerankModel,
+                            basePlan.topK(),
+                            eventPublisher,
+                            "terminology_merge"
+                    );
+        } else {
+            merged = merged.stream()
+                    .sorted((left, right) -> Double.compare(right.rankingScore(), left.rankingScore()))
+                    .limit(basePlan.topK())
+                    .toList();
+        }
+        return new RetrievalResult(UUID.randomUUID().toString(), merged, Map.of(
+                "ranking_mode", finalRerankApplied ? "terminology_merge_rerank" : "terminology_merge_score_sort",
+                "terminology_applied", expansion.applied(),
+                "terminology_queries", expansion.executedQueries()
+        ));
+    }
+
+    private static RetrievalResult withTerminologyDebug(
+            RetrievalResult result,
+            TerminologyPromptContext terminologyContext
+    ) {
+        if (terminologyContext == null || !terminologyContext.changed()) {
+            return result;
+        }
+        Map<String, Object> debugTrace = new LinkedHashMap<>(result.debugTrace());
+        debugTrace.put("terminology_applied", terminologyContext.applied());
+        debugTrace.put("terminology_queries", terminologyContext.normalizedQueries());
+        return new RetrievalResult(result.requestId(), result.chunks(), debugTrace);
+    }
+
+    private List<RetrievalResult> executeTerminologyGroupsInParallel(
+            RetrievalPlan basePlan,
+            List<TerminologyQueryGroup> groups,
+            RagProcessEventPublisher eventPublisher
+    ) {
+        Map<String, String> capturedMdc = MDC.getCopyOfContextMap();
+        List<Callable<RetrievalResult>> tasks = new ArrayList<>(groups.size());
+        for (int i = 0; i < groups.size(); i++) {
+            TerminologyQueryGroup group = groups.get(i);
+            int groupIndex = i + 1;
+            tasks.add(() -> {
+                restoreMdc(capturedMdc);
+                try {
+                    return executeRetrieval(
+                            withQueryAndSpecs(basePlan, group.queryText(), group.recallSpecs()),
+                            eventPublisher,
+                            groupIndex,
+                            groups.size()
+                    );
+                } finally {
+                    MDC.clear();
+                }
+            });
+        }
+        return invokeRetrievalTasks(tasks, "术语分组并行检索");
+    }
+
+    /**
+     * 记录术语替换命中明细：trace 事件 + SSE 进度事件（仅当确有替换时调用）。
+     */
+    private void publishTerminologyApplied(TerminologyExpansion expansion, RagProcessEventPublisher eventPublisher) {
+        List<Map<String, Object>> appliedReplacements = expansion.applied().stream()
+                .map(replacement -> {
+                    Map<String, Object> item = new LinkedHashMap<String, Object>();
+                    item.put("colloquial", replacement.colloquial());
+                    item.put("term", replacement.term());
+                    item.put("scope", replacement.scope());
+                    if (replacement.knowledgeBaseId() != null) {
+                        item.put("knowledgeBaseId", replacement.knowledgeBaseId());
+                    }
+                    return item;
+                })
+                .toList();
+        List<String> executedQueries = expansion.groups().stream()
+                .map(TerminologyQueryGroup::queryText)
+                .distinct()
+                .toList();
+        recordTrace("terminology", "terminology.replacement.applied", Map.of(
+                "appliedCount", appliedReplacements.size(),
+                "appliedReplacements", appliedReplacements,
+                "executedQueries", executedQueries
+        ));
+        log.info("术语替换已应用，命中数={}，执行文本数={}", appliedReplacements.size(), executedQueries.size());
+        if (eventPublisher == RagProcessEventPublisher.NO_OP) {
+            return;
+        }
+        StageHandle handle = eventPublisher.start(
+                RagProcessStage.TERMINOLOGY_REPLACEMENT,
+                Map.of("appliedCount", appliedReplacements.size())
+        );
+        eventPublisher.complete(handle, Map.of(
+                "appliedCount", appliedReplacements.size(),
+                "appliedReplacements", appliedReplacements,
+                "executedQueries", executedQueries
+        ));
+    }
+
     private List<RetrievedChunk> mergeChunks(List<RetrievalResult> results) {
         Map<String, RetrievedChunk> deduped = new LinkedHashMap<>();
         for (RetrievalResult result : results) {
@@ -1832,6 +2291,7 @@ public class RagApiService {
     ) {
         String difyFilesUrl = appProperties.getRag().getDifyFilesUrl();
         Map<String, ReferenceSource> sources = new LinkedHashMap<>();
+        Map<String, List<String>> refsBySource = new LinkedHashMap<>();
         for (RetrievedChunk chunk : chunks) {
             Map<String, Object> metadata = chunk.metadata();
             DocumentMeta documentMeta = documentMetas.get(chunk.documentId());
@@ -1848,16 +2308,37 @@ public class RagApiService {
             String defaultPath = buildFilePath(difyFilesUrl, uploadFileId, uploadFileKey, fileName);
             String path = resolveReferencePath(documentMeta, defaultPath);
             String key = referenceSourceKey(chunk.documentId(), fileName, uploadFileId, path);
+            // 分段索引节点 ID（dify metadata JSON 的 doc_id）；缺失时退回检索链路的原始 chunk 标识
+            String indexNodeId = metadataValue(metadata, "doc_id");
+            String ref = indexNodeId != null && !indexNodeId.isBlank() ? indexNodeId : chunk.chunkId();
+            List<String> refs = refsBySource.computeIfAbsent(key, ignored -> new ArrayList<>());
+            if (!refs.contains(ref)) {
+                refs.add(ref);
+            }
             sources.computeIfAbsent(key, ignored -> new ReferenceSource(
                     sources.size() + 1,
                     key,
                     fileName,
                     path,
                     chunk.documentId(),
-                    resolveDatasetName(datasetNames, chunk, documentMeta)
+                    resolveDatasetName(datasetNames, chunk, documentMeta),
+                    List.of()
             ));
         }
-        return List.copyOf(sources.values());
+        Map<String, String> positions = resolveSegmentPositions(refsBySource.values().stream()
+                .flatMap(List::stream)
+                .toList());
+        return sources.values().stream()
+                .map(source -> new ReferenceSource(
+                        source.index(),
+                        source.key(),
+                        source.fileName(),
+                        source.path(),
+                        source.documentId(),
+                        source.datasetName(),
+                        chunkIdsForRefs(refsBySource.getOrDefault(source.key(), List.of()), positions)
+                ))
+                .toList();
     }
 
     /**
@@ -1941,7 +2422,7 @@ public class RagApiService {
         return "document:" + Objects.toString(documentId, "") + ":" + fileName;
     }
 
-    private LlmResponse generateAnswer(LlmRequest llmRequest) {
+    private LlmResponse generateAnswer(LlmRequest llmRequest, List<ReferenceSource> referenceSources) {
         long start = System.nanoTime();
         recordTrace("answer_generation", "answer_generation.started", Map.of(
                 "model", llmRequest.modelEndpoint().model(),
@@ -1960,6 +2441,7 @@ public class RagApiService {
             tracePayload.put("elapsedMs", durationMs(start));
             tracePayload.put("stream", false);
             recordTrace("answer_generation", "answer_generation.summary", tracePayload);
+            recordAnswerReferences(response.content(), referenceSources);
             return response;
         } catch (RagServiceException ex) {
             recordTrace("answer_generation", "answer_generation.failed", Map.of(
@@ -2048,6 +2530,7 @@ public class RagApiService {
             tracePayload.put("stream", true);
             tracePayload.put("elapsedMs", durationMs(generationStart));
             recordTrace("answer_generation", "answer_generation.summary", tracePayload);
+            recordAnswerReferences(answerBuilder.toString(), preparedAnswer.referenceSources());
             eventConsumer.accept(new StreamEvent("done", new ApiModels.RagAnswerStreamDone(
                     chunk.finishReason(),
                     Map.copyOf(metadata)
@@ -2073,19 +2556,39 @@ public class RagApiService {
      * 以独立的 {@code reference} 事件下发参考资料，避免把参考资料混进 {@code delta} 正文。
      *
      * <p>载荷为 {@link ApiModels.RagReferenceEvent}，字段为 {@code fileName}、{@code path}、
-     * {@code documentId}、{@code datasetName}；答案为空或与问题无关时下发空列表。
+     * {@code documentId}、{@code datasetName}、{@code chunkIds}；答案为空或与问题无关时下发空列表。
      */
     private static void emitReferenceEvent(
             String answer,
             List<ReferenceSource> referenceSources,
             Consumer<StreamEvent> eventConsumer
     ) {
-        List<ApiModels.Reference> references = shouldOmitBackendReferences(answer)
-                ? List.of()
-                : referencesFromSources(referenceSources);
         eventConsumer.accept(new StreamEvent(
                 "reference",
-                new ApiModels.RagReferenceEvent(references)
+                new ApiModels.RagReferenceEvent(referencesForAnswer(answer, referenceSources))
+        ));
+    }
+
+    /**
+     * 与下发给客户端的 {@code reference} 事件同一口径的参考资料列表：
+     * 答案为空或判定为与问题无关时返回空列表。trace 持久化与 SSE 下发共用，保证两边一致。
+     */
+    private static List<ApiModels.Reference> referencesForAnswer(
+            String answer,
+            List<ReferenceSource> referenceSources
+    ) {
+        return shouldOmitBackendReferences(answer)
+                ? List.of()
+                : referencesFromSources(referenceSources);
+    }
+
+    /**
+     * 以独立 trace 事件 {@code answer_generation.references} 持久化参考资料，
+     * 与 SSE 的 {@code reference} 独立事件对称；经 trace_id/request_id 与 summary 事件关联。
+     */
+    private void recordAnswerReferences(String answer, List<ReferenceSource> referenceSources) {
+        recordTrace("answer_generation", "answer_generation.references", Map.of(
+                "references", referencesForAnswer(answer, referenceSources)
         ));
     }
 
@@ -2180,7 +2683,8 @@ public class RagApiService {
                         source.fileName(),
                         source.path(),
                         source.documentId(),
-                        source.datasetName()
+                        source.datasetName(),
+                        source.chunkIds()
                 ))
                 .toList();
     }
@@ -2189,6 +2693,13 @@ public class RagApiService {
         String difyFilesUrl = appProperties.getRag().getDifyFilesUrl();
         Map<String, DocumentMeta> documentMetas = resolveDocumentMetas(chunks);
         Map<String, String> datasetNames = resolveDatasetNames();
+        Map<String, List<String>> chunkIdsByDocument = new LinkedHashMap<>();
+        for (RetrievedChunk chunk : chunks) {
+            List<String> chunkIds = chunkIdsByDocument.computeIfAbsent(chunk.documentId(), ignored -> new ArrayList<>());
+            if (!chunkIds.contains(chunk.chunkId())) {
+                chunkIds.add(chunk.chunkId());
+            }
+        }
         return chunks.stream()
                 .filter(chunk -> {
                     Map<String, Object> metadata = chunk.metadata();
@@ -2219,7 +2730,8 @@ public class RagApiService {
                             fileName,
                             path,
                             chunk.documentId(),
-                            resolveDatasetName(datasetNames, chunk, documentMeta)
+                            resolveDatasetName(datasetNames, chunk, documentMeta),
+                            List.copyOf(chunkIdsByDocument.getOrDefault(chunk.documentId(), List.of()))
                     );
                 })
                 .filter(reference -> reference.fileName() != null)
@@ -2418,7 +2930,8 @@ public class RagApiService {
             String fileName,
             String path,
             String documentId,
-            String datasetName
+            String datasetName,
+            List<String> chunkIds
     ) {
     }
 

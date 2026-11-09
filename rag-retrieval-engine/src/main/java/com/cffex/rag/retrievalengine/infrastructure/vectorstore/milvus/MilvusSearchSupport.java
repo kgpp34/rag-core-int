@@ -23,6 +23,7 @@ import io.milvus.v2.service.vector.response.SearchResp;
 public class MilvusSearchSupport {
 
     private static final String DOCUMENT_ID_METADATA_KEY = "document_id";
+    private static final String CHUNK_ID_METADATA_KEY = "doc_id";
     private static final String KNOWLEDGE_BASE_ID_METADATA_KEY = "knowledge_base_id";
 
     private final MilvusProperties properties;
@@ -71,10 +72,16 @@ public class MilvusSearchSupport {
         Map<String, Object> rawEntity = Objects.requireNonNullElse(result.getEntity(), Map.of());
         Map<String, Object> entity = sanitizeEntity(rawEntity);
         entity.putIfAbsent(KNOWLEDGE_BASE_ID_METADATA_KEY, knowledgeBaseId);
+        // dify 入库时把分段索引节点 ID 写在 metadata JSON 的 doc_id 里；提到顶层，
+        // 供引用构建时按 index_node_id 反查分段 position。Milvus 主键是 auto_id 自增数，无业务含义。
+        String indexNodeId = extractDocumentId(entity.get(properties.metadataFieldName()), CHUNK_ID_METADATA_KEY);
+        if (!indexNodeId.isBlank()) {
+            entity.putIfAbsent(CHUNK_ID_METADATA_KEY, indexNodeId);
+        }
         double score = Objects.requireNonNullElse(result.getScore(), 0.0f);
         return new RetrievalCandidate(
                 Objects.toString(result.getId(), ""),
-                extractDocumentId(entity.get(properties.metadataFieldName())),
+                extractDocumentId(entity.get(properties.metadataFieldName()), DOCUMENT_ID_METADATA_KEY),
                 knowledgeBaseId,
                 Objects.toString(entity.get(properties.contentFieldName()), ""),
                 dense ? score : 0.0d,
@@ -121,19 +128,18 @@ public class MilvusSearchSupport {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private String extractDocumentId(Object metadataObj) {
+    private String extractDocumentId(Object metadataObj, String key) {
         if (metadataObj == null) {
             return "";
         }
         if (metadataObj instanceof Map) {
-            Object docId = ((Map<String, Object>) metadataObj).get(DOCUMENT_ID_METADATA_KEY);
-            return docId != null ? Objects.toString(docId, "") : "";
+            Object value = ((Map<?, ?>) metadataObj).get(key);
+            return value != null ? Objects.toString(value, "") : "";
         }
         try {
             JsonNode node = objectMapper.readTree(metadataObj.toString());
-            JsonNode docId = node.get(DOCUMENT_ID_METADATA_KEY);
-            return docId != null ? docId.asText("") : "";
+            JsonNode value = node.get(key);
+            return value != null ? value.asText("") : "";
         } catch (JsonProcessingException ex) {
             return "";
         }

@@ -4,6 +4,7 @@ import com.cffex.rag.common.domain.metadata.DocumentMeta;
 import com.cffex.rag.common.domain.metadata.BusinessDomain;
 import com.cffex.rag.common.domain.metadata.KnowledgeBaseMeta;
 import com.cffex.rag.common.domain.metadata.ModelMeta;
+import com.cffex.rag.common.domain.metadata.SegmentMeta;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -19,6 +20,7 @@ public record MetadataPayload(
         Map<String, ModelMeta> modelsById,
         Map<String, String> documentToKnowledgeBase,
         Map<String, DocumentMeta> documentMetasById,
+        Map<String, SegmentMeta> segmentMetasByIndexNodeId,
         Map<BusinessDomain, List<String>> domainToKnowledgeBases
 ) {
     public MetadataPayload {
@@ -26,10 +28,11 @@ public record MetadataPayload(
         Objects.requireNonNull(modelsById, "modelsById must not be null");
         Objects.requireNonNull(documentToKnowledgeBase, "documentToKnowledgeBase must not be null");
         Objects.requireNonNull(documentMetasById, "documentMetasById must not be null");
+        Objects.requireNonNull(segmentMetasByIndexNodeId, "segmentMetasByIndexNodeId must not be null");
         Objects.requireNonNull(domainToKnowledgeBases, "domainToKnowledgeBases must not be null");
     }
 
     public static MetadataPayload empty() {
-        return new MetadataPayload(Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+        return new MetadataPayload(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
     }
 }

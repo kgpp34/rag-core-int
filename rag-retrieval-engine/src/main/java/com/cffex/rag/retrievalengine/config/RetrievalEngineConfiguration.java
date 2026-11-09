@@ -17,6 +17,7 @@ import io.milvus.v2.client.MilvusClientV2;
 @Configuration
 @EnableConfigurationProperties({
         MilvusProperties.class,
+        KingbaseProperties.class,
         ChatProperties.class,
         RetrievalDebugTraceProperties.class,
         RetrievalHttpClientProperties.class

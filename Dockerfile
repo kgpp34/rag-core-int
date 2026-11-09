@@ -1,6 +1,6 @@
 ARG BUILDER_IMAGE=maven:3.9.11-eclipse-temurin-25
 ARG RUNTIME_IMAGE=eclipse-temurin:25-jre
-ARG APP_VERSION=0.2.9
+ARG APP_VERSION=0.2.10
 
 FROM --platform=$BUILDPLATFORM ${BUILDER_IMAGE} AS builder
 

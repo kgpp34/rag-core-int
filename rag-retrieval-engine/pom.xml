@@ -6,7 +6,7 @@
     <parent>
         <groupId>com.cffex.rag</groupId>
         <artifactId>rag-core-int</artifactId>
-        <version>0.2.9-SNAPSHOT</version>
+        <version>0.2.10-SNAPSHOT</version>
     </parent>
 
     <artifactId>rag-retrieval-engine</artifactId>
@@ -27,6 +27,15 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
         </dependency>
         <dependency>
             <groupId>io.milvus</groupId>

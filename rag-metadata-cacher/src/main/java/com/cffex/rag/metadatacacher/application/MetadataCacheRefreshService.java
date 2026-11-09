@@ -43,16 +43,18 @@ public class MetadataCacheRefreshService {
                     incoming.modelsById(),
                     incoming.documentToKnowledgeBase(),
                     incoming.documentMetasById(),
+                    incoming.segmentMetasByIndexNodeId(),
                     incoming.domainToKnowledgeBases()
             );
             snapshotStore.put(updated);
             log.info(
-                    "元数据刷新完成，数据源={}，版本={}，知识库数={}，模型数={}，文档数={}，耗时={}ms",
+                    "元数据刷新完成，数据源={}，版本={}，知识库数={}，模型数={}，文档数={}，分段数={}，耗时={}ms",
                     source.sourceName(),
                     updated.version(),
                     updated.knowledgeBasesById().size(),
                     updated.modelsById().size(),
                     updated.documentMetasById().size(),
+                    updated.segmentMetasByIndexNodeId().size(),
                     System.currentTimeMillis() - start
             );
             log.info(

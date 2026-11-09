@@ -523,7 +523,7 @@ answer += data.content;
 
 ```text
 event: reference
-data: {"references":[{"fileName":"三重一大决策制度实施办法.pdf","path":"http://files.example.com/example.pdf","documentId":"doc-1","datasetName":"业务规则库"}]}
+data: {"references":[{"fileName":"三重一大决策制度实施办法.pdf","path":"http://files.example.com/example.pdf","documentId":"doc-1","datasetName":"业务规则库","chunkIds":["2","6"]}]}
 ```
 
 数据结构：
@@ -535,7 +535,8 @@ data: {"references":[{"fileName":"三重一大决策制度实施办法.pdf","pat
       "fileName": "三重一大决策制度实施办法.pdf",
       "path": "http://files.example.com/example.pdf",
       "documentId": "doc-1",
-      "datasetName": "业务规则库"
+      "datasetName": "业务规则库",
+      "chunkIds": ["2", "6"]
     }
   ]
 }
@@ -547,6 +548,7 @@ data: {"references":[{"fileName":"三重一大决策制度实施办法.pdf","pat
 | `path` | 文件访问路径，可能为 `null` |
 | `documentId` | 文档 ID |
 | `datasetName` | 数据集（知识库）名称，取不到名称时退回数据集 ID |
+| `chunkIds` | 该文档被引用的分段定位列表，按引用出现顺序去重排列。优先取 dify `document_segments.position`（分段在文档内的序号，从 0 开始）；缓存中查不到 position 时回退为分段 `index_node_id`（dify metadata JSON 的 `doc_id`），再回退为检索 chunk ID。取不到时为空数组 |
 
 前端收到 `reference` 后即可渲染引用列表，不必等 `done`；`done.metadata.references` 内容与之一致，
 仅为兼容保留。
@@ -558,8 +560,13 @@ data: {"references":[{"fileName":"三重一大决策制度实施办法.pdf","pat
 
 - URL（`path`）与 `datasetName` 仍由 core 依据 `difyFilesUrl` 与文档元数据生成，对外字段不变；
 - 同一文档多条证据只输出一条（按 `documentId + fileName` 去重），顺序沿用 `output.citations`；
-- agentic-int 未下发该事件、或事件 `references_truncated=true`（引用来源超过 20 条被截断）时，
-  回退为 `output.citations` 全量，避免混布或截断导致丢引用。
+  该文档全部被引分段聚合进 `chunkIds`（按 `citations` 出现顺序去重）：以引用里的 `metadata.doc_id`
+  （即分段 `index_node_id`）到元数据缓存反查 `document_segments.position` 作为分段定位，
+  查不到时回退 `index_node_id`，再回退检索 chunk ID；
+- 过滤依据优先取事件里未截断的 `cited_document_ids` 数组；展示用 `references` 列表超过 20 条
+  会被截断（`references_truncated=true`），但只要事件携带 `cited_document_ids` 就不影响过滤；
+- SSE 提前断开、core 通过 `getRun` 对账拿到运行输出时，改用 `run.output.cited_document_ids`
+  过滤；两者都缺失（对接旧版 agentic-int）才回退为 `output.citations` 全量。
 
 非 `AGENTIC_RAG` 路径不受影响，仍按下发时的检索结果生成。
 
