@@ -90,6 +90,7 @@ public class RagApiService {
             "intent.classified",
             "intent.direct_answer",
             "query_rewrite.summary",
+            "terminology.replacement.applied",
             "retrieval.summary",
             "answer_generation.summary",
             "answer_generation.references"
@@ -2195,11 +2196,23 @@ recordTrace("planning", "planning.completed", planningPayload(plan, durationMs(s
                 .map(TerminologyQueryGroup::queryText)
                 .distinct()
                 .toList();
-        recordTrace("terminology", "terminology.replacement.applied", Map.of(
+        List<Map<String, Object>> queryGroups = expansion.groups().stream()
+                .map(group -> Map.<String, Object>of(
+                        "query", group.queryText(),
+                        "knowledgeBaseIds", group.recallSpecs().stream()
+                                .map(KnowledgeBaseRecallSpec::knowledgeBaseId)
+                                .distinct()
+                                .toList()
+                ))
+                .toList();
+        Map<String, Object> payload = Map.of(
+                "sourceQuery", expansion.sourceQuery(),
                 "appliedCount", appliedReplacements.size(),
                 "appliedReplacements", appliedReplacements,
-                "executedQueries", executedQueries
-        ));
+                "executedQueries", executedQueries,
+                "queryGroups", queryGroups
+        );
+        recordTrace("terminology", "terminology.replacement.applied", payload);
         log.info("术语替换已应用，命中数={}，执行文本数={}", appliedReplacements.size(), executedQueries.size());
         if (eventPublisher == RagProcessEventPublisher.NO_OP) {
             return;
@@ -2208,11 +2221,7 @@ recordTrace("planning", "planning.completed", planningPayload(plan, durationMs(s
                 RagProcessStage.TERMINOLOGY_REPLACEMENT,
                 Map.of("appliedCount", appliedReplacements.size())
         );
-        eventPublisher.complete(handle, Map.of(
-                "appliedCount", appliedReplacements.size(),
-                "appliedReplacements", appliedReplacements,
-                "executedQueries", executedQueries
-        ));
+        eventPublisher.complete(handle, payload);
     }
 
     private List<RetrievedChunk> mergeChunks(List<RetrievalResult> results) {

@@ -15,6 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -1137,6 +1139,10 @@ class RagApiServiceTest {
     }
 
     private RagApiService newServiceWithTerminology(TerminologyService terminologyService) {
+        return newServiceWithTerminology(terminologyService, new NoOpTraceRecorder());
+    }
+
+    private RagApiService newServiceWithTerminology(TerminologyService terminologyService, TraceRecorder traceRecorder) {
         AppProperties appProperties = new AppProperties();
         appProperties.getRag().getIntent().setEnabled(false);
         appProperties.getRag().getAnswer().setDefaultLlmModel("qwen-test");
@@ -1151,7 +1157,7 @@ class RagApiServiceTest {
                 llmService,
                 appProperties,
                 conversationMemoryService,
-                new NoOpTraceRecorder(),
+                traceRecorder,
                 new TraceProperties(),
                 new DisabledAgenticRagClient(),
                 new DisabledAgenticRunStore(),
@@ -1190,7 +1196,8 @@ class RagApiServiceTest {
 
     @Test
     void search_terminologyDisabled_singleExecutionWithOriginalPlan() {
-        ragApiService = newServiceWithTerminology(TerminologyService.DISABLED);
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
+        ragApiService = newServiceWithTerminology(TerminologyService.DISABLED, traceRecorder);
         ExecutionPlan executionPlan = sampleExecutionPlan(null);
         RetrievalPlan plan = executionPlan.primaryRetrievalPlan();
         when(queryPlannerFacade.plan(any(QueryPlanRequest.class))).thenReturn(executionPlan);
@@ -1199,12 +1206,15 @@ class RagApiServiceTest {
         ragApiService.search(new ApiModels.QueryRequest("口语词是什么", List.of("doc-1"), null, null));
 
         verify(retrievalEngine, times(1)).execute(plan);
+        assertFalse(traceRecorder.events.stream()
+                .anyMatch(event -> "terminology.replacement.applied".equals(event.eventName())));
     }
 
     @Test
     void search_terminologyNoHit_singleExecutionWithOriginalPlan() {
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
         ragApiService = newServiceWithTerminology(enabledTerminologyService(
-                new TerminologyRecord(1, "global", null, "术语", "[\"口语\"]")));
+                new TerminologyRecord(1, "global", null, "术语", "[\"口语\"]")), traceRecorder);
         ExecutionPlan executionPlan = sampleExecutionPlan(null);
         RetrievalPlan plan = executionPlan.primaryRetrievalPlan();
         when(queryPlannerFacade.plan(any(QueryPlanRequest.class))).thenReturn(executionPlan);
@@ -1213,6 +1223,8 @@ class RagApiServiceTest {
         ragApiService.search(new ApiModels.QueryRequest("hello", List.of("doc-1"), null, null));
 
         verify(retrievalEngine, times(1)).execute(plan);
+        assertFalse(traceRecorder.events.stream()
+                .anyMatch(event -> "terminology.replacement.applied".equals(event.eventName())));
     }
 
     @Test
@@ -1255,10 +1267,103 @@ class RagApiServiceTest {
         assertTrue(userPrompt.contains("专业术语是什么"));
     }
 
+    @ParameterizedTest
+    @CsvSource({"false,false", "false,true", "true,false", "true,true"})
+    void answer_terminologyHit_recordsSummaryEventAndPassesContextToModel(boolean stream, boolean rewrite) {
+        String originalQuery = "对于自运维版本，提交评审时必须正式发布吗";
+        List<String> sourceQueries = rewrite
+                ? List.of(originalQuery, "自运维版本 变更评审会 正式发布要求", "变更评审流程 自运维版本 发布状态")
+                : List.of(originalQuery);
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
+        ragApiService = newServiceWithTerminology(enabledTerminologyService(
+                new TerminologyRecord(1, "global", null, "版本", "[\"自运维版本\"]")), traceRecorder);
+        when(queryPlannerFacade.plan(any(QueryPlanRequest.class)))
+                .thenReturn(sampleExecutionPlan(null, originalQuery));
+        when(metadataQueryService.listModels(any())).thenReturn(List.of(
+                new ModelMeta("llm-default", "qwen-test", ModelType.LLM, "http://llm", "secret", true)
+        ));
+        LlmResponse answer = new LlmResponse("answer", "stop", Map.of());
+        if (rewrite) {
+            LlmResponse rewritten = new LlmResponse("""
+                    {
+                      "dependsOnHistory": false,
+                      "retrievalQueries": ["自运维版本 变更评审会 正式发布要求", "变更评审流程 自运维版本 发布状态"]
+                    }
+                    """, "stop", Map.of());
+            if (stream) {
+                when(llmService.generate(any())).thenReturn(rewritten);
+            } else {
+                when(llmService.generate(any())).thenReturn(rewritten, answer);
+            }
+        } else if (!stream) {
+            when(llmService.generate(any())).thenReturn(answer);
+        }
+
+        ArgumentCaptor<LlmRequest> answerRequest = ArgumentCaptor.forClass(LlmRequest.class);
+        ApiModels.RagAnswerRequest request = new ApiModels.RagAnswerRequest(
+                originalQuery, "test-user", List.of("doc-1"), null, null, null, null,
+                new ApiModels.QueryRewriteConfig(rewrite, null));
+        List<RagApiService.StreamEvent> streamEvents = new ArrayList<>();
+        ArgumentCaptor<RetrievalPlan> plans = ArgumentCaptor.forClass(RetrievalPlan.class);
+        if (stream) {
+            when(retrievalEngine.execute(any(RetrievalPlan.class), any())).thenReturn(sampleRetrieval());
+            doAnswer(invocation -> {
+                java.util.function.Consumer<LlmStreamChunk> consumer = invocation.getArgument(1);
+                consumer.accept(new LlmStreamChunk("answer", "stop", true, Map.of()));
+                return null;
+            }).when(llmService).streamGenerate(any(), any());
+            ragApiService.streamAnswer(request, streamEvents::add);
+            verify(llmService).streamGenerate(answerRequest.capture(), any());
+            verify(retrievalEngine, times(sourceQueries.size())).execute(plans.capture(), any());
+        } else {
+            when(retrievalEngine.execute(any(RetrievalPlan.class))).thenReturn(sampleRetrieval());
+            ragApiService.answer(request);
+            verify(llmService, times(rewrite ? 2 : 1)).generate(answerRequest.capture());
+            verify(retrievalEngine, times(sourceQueries.size())).execute(plans.capture());
+        }
+
+        List<TraceEvent> replacementEvents = traceRecorder.events.stream()
+                .filter(event -> "terminology.replacement.applied".equals(event.eventName()))
+                .toList();
+        assertEquals(sourceQueries.size(), replacementEvents.size());
+        assertEquals(sourceQueries, replacementEvents.stream()
+                .map(event -> event.payload().get("sourceQuery")).toList());
+        for (TraceEvent event : replacementEvents) {
+            String source = (String) event.payload().get("sourceQuery");
+            String executed = source.replace("自运维版本", "版本");
+            assertEquals("terminology", event.stage());
+            assertEquals(1, event.payload().get("appliedCount"));
+            assertEquals(List.of(Map.of("colloquial", "自运维版本", "term", "版本", "scope", "global")),
+                    event.payload().get("appliedReplacements"));
+            assertEquals(List.of(executed), event.payload().get("executedQueries"));
+            assertEquals(List.of(Map.of("query", executed, "knowledgeBaseIds", List.of("kb-1"))),
+                    event.payload().get("queryGroups"));
+        }
+        assertEquals(sourceQueries.stream().map(query -> query.replace("自运维版本", "版本")).sorted().toList(),
+                plans.getAllValues().stream().map(RetrievalPlan::query).sorted().toList());
+        String prompt = answerRequest.getValue().messages().get(1).content();
+        assertTrue(prompt.contains("用户问题：" + originalQuery));
+        assertTrue(prompt.contains("自运维版本 → 版本"));
+        for (String source : sourceQueries) {
+            assertTrue(prompt.contains(source.replace("自运维版本", "版本")));
+        }
+        if (stream) {
+            List<ApiModels.RagProgressEvent> appliedProgress = streamEvents.stream()
+                    .filter(event -> "rag_progress".equals(event.name()))
+                    .map(event -> (ApiModels.RagProgressEvent) event.payload())
+                    .filter(event -> "terminology_replacement".equals(event.stage()) && "completed".equals(event.status()))
+                    .toList();
+            assertEquals(sourceQueries.size(), appliedProgress.size());
+            assertEquals(replacementEvents.stream().map(TraceEvent::payload).toList(),
+                    appliedProgress.stream().map(ApiModels.RagProgressEvent::details).toList());
+        }
+    }
+
     @Test
     void search_terminologyKbHit_splitsPlansAndMerges() {
+        RecordingTraceRecorder traceRecorder = new RecordingTraceRecorder();
         ragApiService = newServiceWithTerminology(enabledTerminologyService(
-                new TerminologyRecord(2, "single_kb", "kb-1", "保证金监控", "[\"保证金系数\"]")));
+                new TerminologyRecord(2, "single_kb", "kb-1", "保证金监控", "[\"保证金系数\"]")), traceRecorder);
         when(queryPlannerFacade.plan(any(QueryPlanRequest.class))).thenReturn(twoKbExecutionPlan(
                 "保证金系数要求是什么", RankingSpec.WeightedRankingSpec.equalWeight()));
         when(retrievalEngine.execute(any(RetrievalPlan.class))).thenAnswer(invocation -> {
@@ -1294,6 +1399,16 @@ class RagApiServiceTest {
 
         assertEquals(2, response.chunks().size());
         assertEquals("terminology_merge_score_sort", response.debugTrace().get("ranking_mode"));
+        TraceEvent event = traceRecorder.events.stream()
+                .filter(recorded -> "terminology.replacement.applied".equals(recorded.eventName()))
+                .findFirst().orElseThrow();
+        assertEquals("保证金系数要求是什么", event.payload().get("sourceQuery"));
+        assertEquals(List.of(
+                Map.of("query", "保证金监控要求是什么", "knowledgeBaseIds", List.of("kb-1")),
+                Map.of("query", "保证金系数要求是什么", "knowledgeBaseIds", List.of("kb-2"))
+        ), event.payload().get("queryGroups"));
+        assertEquals(List.of(Map.of("colloquial", "保证金系数", "term", "保证金监控",
+                "scope", "single_kb", "knowledgeBaseId", "kb-1")), event.payload().get("appliedReplacements"));
     }
 
     @Test
